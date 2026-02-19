@@ -1,0 +1,105 @@
+{
+  "app": {
+    "name": "mdpad",
+    "version": "mdpad v1.0.0",
+    "description": "GitHub準拠 Markdownエディタ",
+    "untitled": "無題"
+  },
+  "menu": {
+    "file": "ファイル",
+    "file_new": "新規",
+    "file_open": "開く...",
+    "file_save": "保存",
+    "file_saveAs": "名前を付けて保存...",
+    "file_exit": "終了",
+    "edit": "編集",
+    "edit_undo": "元に戻す",
+    "edit_redo": "やり直し",
+    "edit_find": "検索...",
+    "edit_replace": "置換...",
+    "view": "表示",
+    "view_toggleEditor": "エディタペインの切替",
+    "view_togglePreview": "プレビューペインの切替",
+    "view_toggleDiff": "差分ペインの切替",
+    "view_toggleWordWrap": "折り返しの切替",
+    "view_toggleCloseBrackets": "括弧の自動補完",
+    "view_zoomIn": "拡大",
+    "view_zoomOut": "縮小",
+    "view_resetZoom": "ズームをリセット",
+    "view_devTools": "開発者ツールの切替",
+    "view_language": "言語",
+    "help": "ヘルプ",
+    "help_about": "mdpadについて"
+  },
+  "dialog": {
+    "filterMarkdown": "Markdown",
+    "filterText": "テキスト",
+    "filterAll": "すべてのファイル",
+    "saveConfirmTitle": "保存",
+    "saveConfirmDontSave": "保存しない",
+    "saveConfirmCancel": "キャンセル",
+    "saveConfirmMessage": "変更を保存しますか？",
+    "saveConfirmDetail": "保存しない場合、変更内容は失われます。"
+  },
+  "toolbar": {
+    "edit": "編集",
+    "preview": "プレビュー",
+    "diff": "差分",
+    "editPreview": "編集+プレビュー",
+    "all": "全表示",
+    "tipEditor": "エディタ切替 (Ctrl+1)",
+    "tipPreview": "プレビュー切替 (Ctrl+2)",
+    "tipDiff": "差分切替 (Ctrl+3)",
+    "tipEditPreview": "編集 + プレビュー",
+    "tipAll": "全ペイン表示"
+  },
+  "statusBar": {
+    "ln": "行",
+    "col": "列",
+    "lines": "行",
+    "selected": "選択中",
+    "encoding": "UTF-8",
+    "filetype": "Markdown"
+  },
+  "search": {
+    "find": "検索",
+    "replace": "置換",
+    "next": "次へ",
+    "previous": "前へ",
+    "all": "すべて",
+    "matchCase": "大文字小文字を区別",
+    "byWord": "単語単位",
+    "regexp": "正規表現",
+    "replaceBtn": "置換",
+    "replaceAll": "すべて置換",
+    "close": "閉じる"
+  },
+  "globalSearch": {
+    "placeholder": "ペイン横断検索...",
+    "editor": "エディタ",
+    "preview": "プレビュー",
+    "diff": "差分",
+    "hits": "件",
+    "noResults": "結果なし"
+  },
+  "diffPane": {
+    "editHistory": "編集履歴",
+    "fileCompare": "ファイル比較",
+    "sideBySide": "左右並列",
+    "inline": "インライン",
+    "openFile": "ファイルを開く...",
+    "noChanges": "変更はありません",
+    "selectFile": "比較するファイルを選択してください",
+    "noChangesDiff": "変更なし"
+  },
+  "previewPane": {
+    "preview": "プレビュー",
+    "richDiff": "リッチ差分",
+    "vsOriginal": "元の内容と比較",
+    "vsFile": "ファイルと比較",
+    "openFile": "ファイルを開く...",
+    "selectFile": "比較するファイルを選択してください",
+    "mermaidError": "Mermaidエラー:",
+    "noChanges": "変更なし"
+  }
+}

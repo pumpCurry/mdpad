@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>mdpad</title>
+    <link rel="stylesheet" href="../../dist/renderer/github-markdown.css" />
+    <link rel="stylesheet" href="../../dist/renderer/katex/katex.min.css" />
+    <link rel="stylesheet" href="../../dist/renderer/hljs/github.min.css" />
+    <link rel="stylesheet" href="styles/main.css" />
+    <link rel="stylesheet" href="styles/editor.css" />
+    <link rel="stylesheet" href="styles/preview.css" />
+    <link rel="stylesheet" href="styles/diff.css" />
+    <link rel="stylesheet" href="styles/pane-layout.css" />
+  </head>
+  <body>
+    <div id="toolbar"></div>
+    <div id="pane-container">
+      <div id="editor-pane" class="pane"></div>
+      <div id="resize-handle-1" class="resize-handle" style="display: none"></div>
+      <div id="preview-pane" class="pane" style="display: none"></div>
+      <div id="resize-handle-2" class="resize-handle" style="display: none"></div>
+      <div id="diff-pane" class="pane" style="display: none"></div>
+    </div>
+    <div id="status-bar"></div>
+    <script src="../../dist/renderer/bundle.js"></script>
+  </body>
+</html>

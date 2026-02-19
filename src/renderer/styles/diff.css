@@ -1,0 +1,133 @@
+#diff-pane {
+  overflow-y: auto;
+  background: #ffffff;
+}
+
+#diff-pane .diff-toolbar {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+  background: #f6f8fa;
+  border-bottom: 1px solid #d0d7de;
+  gap: 8px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+#diff-pane .diff-toolbar select,
+#diff-pane .diff-toolbar button {
+  font-size: 12px;
+  padding: 2px 8px;
+  border: 1px solid #d0d7de;
+  border-radius: 4px;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+#diff-pane .diff-toolbar button:hover {
+  background: #e8ebef;
+}
+
+#diff-pane .diff-content {
+  overflow-y: auto;
+  flex: 1;
+  font-family: "Cascadia Code", "Consolas", "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Side-by-side diff */
+.diff-side-by-side {
+  display: flex;
+  width: 100%;
+}
+
+.diff-side-by-side .diff-column {
+  flex: 1;
+  overflow-x: auto;
+}
+
+.diff-side-by-side .diff-column:first-child {
+  border-right: 1px solid #d0d7de;
+}
+
+/* Diff lines */
+.diff-line {
+  display: flex;
+  white-space: pre;
+  min-height: 1.5em;
+}
+
+.diff-line-number {
+  width: 50px;
+  min-width: 50px;
+  text-align: right;
+  padding: 0 8px 0 4px;
+  color: #8c959f;
+  background: #f6f8fa;
+  border-right: 1px solid #d0d7de;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.diff-line-content {
+  flex: 1;
+  padding: 0 8px;
+  overflow-x: auto;
+}
+
+/* Diff colors */
+.diff-line.added {
+  background: #dafbe1;
+}
+
+.diff-line.added .diff-line-number {
+  background: #ccffd8;
+  color: #1a7f37;
+}
+
+.diff-line.removed {
+  background: #ffebe9;
+}
+
+.diff-line.removed .diff-line-number {
+  background: #ffd7d5;
+  color: #cf222e;
+}
+
+.diff-line.unchanged {
+  background: #ffffff;
+}
+
+/* Word-level diff highlights */
+.diff-word-added {
+  background: #abf2bc;
+  border-radius: 2px;
+}
+
+.diff-word-removed {
+  background: #ff8182;
+  border-radius: 2px;
+}
+
+/* Inline/unified diff header */
+.diff-hunk-header {
+  background: #ddf4ff;
+  color: #0969da;
+  padding: 4px 8px;
+  font-size: 12px;
+  border-top: 1px solid #d0d7de;
+  border-bottom: 1px solid #d0d7de;
+}
+
+/* Empty diff state */
+.diff-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #8c959f;
+  font-size: 14px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial,
+    sans-serif;
+}

@@ -1,0 +1,30 @@
+const { contextBridge, ipcRenderer } = require("electron");
+
+contextBridge.exposeInMainWorld("mdpad", {
+  // File operations
+  openFile: () => ipcRenderer.invoke("file:open"),
+  openFileByPath: (filePath) => ipcRenderer.invoke("file:openByPath", filePath),
+  saveFile: (filePath, content) =>
+    ipcRenderer.invoke("file:save", filePath, content),
+  saveFileAs: (content) => ipcRenderer.invoke("file:saveAs", content),
+  getRecentFiles: () => ipcRenderer.invoke("file:getRecent"),
+
+  // Diff
+  openDiffFile: () => ipcRenderer.invoke("diff:openFile"),
+
+  // Window
+  setTitle: (title) => ipcRenderer.invoke("window:setTitle", title),
+  confirmSave: () => ipcRenderer.invoke("dialog:confirmSave"),
+
+  // i18n
+  getLocale: () => ipcRenderer.invoke("i18n:getLocale"),
+  getSupportedLocales: () => ipcRenderer.invoke("i18n:getSupportedLocales"),
+  setLocale: (locale) => ipcRenderer.invoke("i18n:setLocale", locale),
+
+  // Menu actions (main -> renderer)
+  onMenuAction: (callback) => {
+    const listener = (_event, action) => callback(action);
+    ipcRenderer.on("menu:action", listener);
+    return () => ipcRenderer.removeListener("menu:action", listener);
+  },
+});

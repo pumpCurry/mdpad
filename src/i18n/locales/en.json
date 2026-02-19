@@ -1,0 +1,105 @@
+{
+  "app": {
+    "name": "mdpad",
+    "version": "mdpad v1.0.0",
+    "description": "GitHub-flavored Markdown Editor",
+    "untitled": "Untitled"
+  },
+  "menu": {
+    "file": "File",
+    "file_new": "New",
+    "file_open": "Open...",
+    "file_save": "Save",
+    "file_saveAs": "Save As...",
+    "file_exit": "Exit",
+    "edit": "Edit",
+    "edit_undo": "Undo",
+    "edit_redo": "Redo",
+    "edit_find": "Find...",
+    "edit_replace": "Replace...",
+    "view": "View",
+    "view_toggleEditor": "Toggle Editor Pane",
+    "view_togglePreview": "Toggle Preview Pane",
+    "view_toggleDiff": "Toggle Diff Pane",
+    "view_toggleWordWrap": "Toggle Word Wrap",
+    "view_toggleCloseBrackets": "Auto-close Brackets",
+    "view_zoomIn": "Zoom In",
+    "view_zoomOut": "Zoom Out",
+    "view_resetZoom": "Reset Zoom",
+    "view_devTools": "Toggle Developer Tools",
+    "view_language": "Language",
+    "help": "Help",
+    "help_about": "About mdpad"
+  },
+  "dialog": {
+    "filterMarkdown": "Markdown",
+    "filterText": "Text",
+    "filterAll": "All Files",
+    "saveConfirmTitle": "Save",
+    "saveConfirmDontSave": "Don't Save",
+    "saveConfirmCancel": "Cancel",
+    "saveConfirmMessage": "Do you want to save changes?",
+    "saveConfirmDetail": "Your changes will be lost if you don't save them."
+  },
+  "toolbar": {
+    "edit": "Edit",
+    "preview": "Preview",
+    "diff": "Diff",
+    "editPreview": "Edit+Preview",
+    "all": "All",
+    "tipEditor": "Toggle Editor (Ctrl+1)",
+    "tipPreview": "Toggle Preview (Ctrl+2)",
+    "tipDiff": "Toggle Diff (Ctrl+3)",
+    "tipEditPreview": "Edit + Preview",
+    "tipAll": "All Panes"
+  },
+  "statusBar": {
+    "ln": "Ln",
+    "col": "Col",
+    "lines": "lines",
+    "selected": "selected",
+    "encoding": "UTF-8",
+    "filetype": "Markdown"
+  },
+  "search": {
+    "find": "Find",
+    "replace": "Replace",
+    "next": "next",
+    "previous": "previous",
+    "all": "all",
+    "matchCase": "match case",
+    "byWord": "by word",
+    "regexp": "regexp",
+    "replaceBtn": "replace",
+    "replaceAll": "replace all",
+    "close": "close"
+  },
+  "globalSearch": {
+    "placeholder": "Search across panes...",
+    "editor": "Editor",
+    "preview": "Preview",
+    "diff": "Diff",
+    "hits": "hits",
+    "noResults": "No results"
+  },
+  "diffPane": {
+    "editHistory": "Edit History",
+    "fileCompare": "File Compare",
+    "sideBySide": "Side by Side",
+    "inline": "Inline",
+    "openFile": "Open File...",
+    "noChanges": "No changes to display",
+    "selectFile": "Select a file to compare",
+    "noChangesDiff": "No changes"
+  },
+  "previewPane": {
+    "preview": "Preview",
+    "richDiff": "Rich Diff",
+    "vsOriginal": "vs. Original",
+    "vsFile": "vs. File",
+    "openFile": "Open File...",
+    "selectFile": "Select a file to compare",
+    "mermaidError": "Mermaid Error:",
+    "noChanges": "No changes"
+  }
+}
