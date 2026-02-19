@@ -39,7 +39,14 @@
     "saveConfirmDontSave": "Don't Save",
     "saveConfirmCancel": "Cancel",
     "saveConfirmMessage": "Do you want to save changes?",
-    "saveConfirmDetail": "Your changes will be lost if you don't save them."
+    "saveConfirmDetail": "Your changes will be lost if you don't save them.",
+    "closeNewSave": "&Save",
+    "closeNewExit": "&Exit without saving",
+    "closeExistingSave": "&Save (overwrite)",
+    "closeExistingSaveAs": "Save &As...",
+    "closeExistingExit": "&Exit without saving",
+    "closeMessage": "Do you want to save changes?",
+    "closeDetail": "Your changes will be lost if you don't save them."
   },
   "toolbar": {
     "edit": "Edit",

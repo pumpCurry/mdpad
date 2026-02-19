@@ -19,7 +19,7 @@ import {
 } from "./components/pane-manager.js";
 import { initToolbar, updateButtonStates } from "./components/toolbar.js";
 import { initStatusBar, updateStatusBar } from "./components/status-bar.js";
-import { initGlobalSearch } from "./components/global-search.js";
+import { initGlobalSearch, triggerGlobalSearchUpdate } from "./components/global-search.js";
 import { syncEditorToPreview } from "./lib/scroll-sync.js";
 import { initI18n, t, setLocale, onLocaleChange } from "../i18n/i18n-renderer.js";
 
@@ -27,6 +27,9 @@ import { initI18n, t, setLocale, onLocaleChange } from "../i18n/i18n-renderer.js
 let currentFilePath = null;
 let originalContent = "";
 let isDirty = false;
+
+// Session auto-save interval (ms)
+const SESSION_SAVE_INTERVAL = 5000;
 
 // Initialize components
 async function init() {
@@ -95,12 +98,34 @@ async function init() {
     if (state.diff) {
       updateDiff(getContent(), originalContent);
     }
+    // Also refresh global search for diff pane changes
+    triggerGlobalSearchUpdate();
   };
 
   // Menu action handler
   window.mdpad.onMenuAction((action) => {
     handleMenuAction(action);
   });
+
+  // Expose close-state getter for main process (via executeJavaScript)
+  window.__mdpadGetCloseState = () => ({
+    isDirty,
+    hasFilePath: !!currentFilePath,
+    filePath: currentFilePath,
+  });
+
+  // Expose content getter for main process save-on-close
+  window.__mdpadGetContent = () => getContent();
+
+  // Session auto-save for crash recovery
+  setInterval(() => {
+    if (isDirty) {
+      saveSessionState();
+    }
+  }, SESSION_SAVE_INTERVAL);
+
+  // Check for crash recovery sessions
+  await checkRecovery();
 
   // Update title
   updateTitle();
@@ -126,6 +151,9 @@ function onEditorChange(content) {
   }
 
   updateStatusBar();
+
+  // Trigger global search update (event-based, not polling)
+  triggerGlobalSearchUpdate();
 }
 
 function updateTitle() {
@@ -201,7 +229,7 @@ async function handleMenuAction(action) {
       }
       break;
     case "about":
-      alert(`${t("app.version")}\n${t("app.description")}\n\n(C)5r4ce2`);
+      alert(`${t("app.version")}\n${t("app.description")}\n\n(C)pumpCurry, 5r4ce2 ${new Date().getFullYear()}`);
       break;
   }
 }
@@ -222,6 +250,7 @@ async function newFile() {
   setContent("");
   setOriginalContent("");
   updateTitle();
+  await window.mdpad.clearSession();
 
   const state = getPaneState();
   if (state.preview) updatePreviewImmediate("");
@@ -248,6 +277,7 @@ async function openFile() {
   setContent(result.content);
   setOriginalContent(result.content);
   updateTitle();
+  await window.mdpad.clearSession();
 
   const state = getPaneState();
   if (state.preview) updatePreviewImmediate(result.content);
@@ -264,6 +294,7 @@ async function saveFile() {
   setOriginalContent(content);
   isDirty = false;
   updateTitle();
+  await window.mdpad.clearSession();
   return true;
 }
 
@@ -276,7 +307,77 @@ async function saveFileAs() {
   setOriginalContent(content);
   isDirty = false;
   updateTitle();
+  await window.mdpad.clearSession();
   return true;
+}
+
+// --- Session management for crash recovery ---
+
+function saveSessionState() {
+  try {
+    window.mdpad.saveSession({
+      content: getContent(),
+      filePath: currentFilePath,
+      isDirty,
+      timestamp: Date.now(),
+    });
+  } catch {
+    // Ignore
+  }
+}
+
+async function checkRecovery() {
+  try {
+    const sessions = await window.mdpad.getRecoverySessions();
+    if (!sessions || sessions.length === 0) return;
+
+    // Recover the most recent session
+    const latest = sessions.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0))[0];
+    if (!latest || !latest.content) return;
+
+    const fileName = latest.filePath
+      ? latest.filePath.split(/[\\/]/).pop()
+      : t("app.untitled");
+
+    // Ask user if they want to recover
+    const recover = confirm(
+      `${t("app.name")}: ${fileName}\n\n` +
+      (latest.filePath
+        ? `Recovered unsaved changes for: ${fileName}`
+        : `Recovered unsaved content from a previous session`)
+    );
+
+    if (recover) {
+      if (latest.filePath) {
+        currentFilePath = latest.filePath;
+      }
+      setContent(latest.content);
+      if (latest.filePath) {
+        // Try to load original for diff comparison
+        try {
+          const orig = await window.mdpad.openFileByPath(latest.filePath);
+          if (orig) {
+            originalContent = orig.content;
+            setOriginalContent(orig.content);
+          }
+        } catch {
+          // Ignore
+        }
+      }
+      isDirty = true;
+      updateTitle();
+      const state = getPaneState();
+      if (state.preview) updatePreviewImmediate(latest.content);
+      if (state.diff) updateDiff(latest.content, originalContent);
+    }
+
+    // Clean up all recovered session files
+    // (The main process handles file deletion via session:clear
+    //  but we also need to remove orphaned files that were loaded)
+    // This is handled in main.js loadRecoverySessions which marks _sessionFile
+  } catch {
+    // Ignore recovery errors
+  }
 }
 
 // Start the app

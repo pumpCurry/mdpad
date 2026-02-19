@@ -21,6 +21,11 @@ contextBridge.exposeInMainWorld("mdpad", {
   getSupportedLocales: () => ipcRenderer.invoke("i18n:getSupportedLocales"),
   setLocale: (locale) => ipcRenderer.invoke("i18n:setLocale", locale),
 
+  // Session (crash recovery)
+  saveSession: (data) => ipcRenderer.invoke("session:save", data),
+  getRecoverySessions: () => ipcRenderer.invoke("session:getRecovery"),
+  clearSession: () => ipcRenderer.invoke("session:clear"),
+
   // Menu actions (main -> renderer)
   onMenuAction: (callback) => {
     const listener = (_event, action) => callback(action);

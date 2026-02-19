@@ -11,7 +11,7 @@
     "build": "npm run build:renderer && electron-builder",
     "dev": "npm run build:renderer && electron . --dev"
   },
-  "author": "(C)5r4ce2",
+  "author": "(C)pumpCurry, 5r4ce2",
   "license": "MIT",
   "devDependencies": {
     "electron": "^33.0.0",

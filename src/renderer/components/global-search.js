@@ -13,6 +13,7 @@ let hitCountEl = null;
 let toggles = { editor: true, preview: true, diff: true };
 let currentQuery = "";
 let debounceTimer = null;
+let updateTimer = null;
 
 // CodeMirror decoration effect for highlighting search matches
 const setSearchHighlights = StateEffect.define();
@@ -75,13 +76,19 @@ export function initGlobalSearch() {
       searchInput.value = currentQuery;
     }
   });
+}
 
-  // Listen for editor changes to update hit count in near-real-time
-  setInterval(() => {
-    if (currentQuery) {
-      performSearch();
-    }
-  }, 500);
+/**
+ * Called externally when content changes (editor edit, replace, diff file change, etc.)
+ * This replaces the old 500ms polling setInterval.
+ */
+export function triggerGlobalSearchUpdate() {
+  if (!currentQuery) return;
+  // Debounce to avoid excessive updates during rapid typing
+  if (updateTimer) clearTimeout(updateTimer);
+  updateTimer = setTimeout(() => {
+    performSearch();
+  }, 100);
 }
 
 function buildHTML() {
@@ -147,7 +154,7 @@ function bindEvents() {
 function performSearch() {
   if (!currentQuery) {
     clearAllHighlights();
-    hitCountEl.textContent = "";
+    if (hitCountEl) hitCountEl.textContent = "";
     return;
   }
 
@@ -184,12 +191,14 @@ function performSearch() {
   }
 
   // Update hit count display
-  if (totalHits > 0) {
-    hitCountEl.textContent = `${totalHits} ${t("globalSearch.hits")}`;
-    hitCountEl.classList.remove("no-results");
-  } else {
-    hitCountEl.textContent = t("globalSearch.noResults");
-    hitCountEl.classList.add("no-results");
+  if (hitCountEl) {
+    if (totalHits > 0) {
+      hitCountEl.textContent = `${totalHits} ${t("globalSearch.hits")}`;
+      hitCountEl.classList.remove("no-results");
+    } else {
+      hitCountEl.textContent = t("globalSearch.noResults");
+      hitCountEl.classList.add("no-results");
+    }
   }
 }
 

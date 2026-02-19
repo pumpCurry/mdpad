@@ -39,7 +39,14 @@
     "saveConfirmDontSave": "保存しない",
     "saveConfirmCancel": "キャンセル",
     "saveConfirmMessage": "変更を保存しますか？",
-    "saveConfirmDetail": "保存しない場合、変更内容は失われます。"
+    "saveConfirmDetail": "保存しない場合、変更内容は失われます。",
+    "closeNewSave": "保存する(&S)",
+    "closeNewExit": "保存せず終了する(&E)",
+    "closeExistingSave": "上書き保存する(&S)",
+    "closeExistingSaveAs": "新規保存する(&A)",
+    "closeExistingExit": "保存せず終了する(&E)",
+    "closeMessage": "変更を保存しますか？",
+    "closeDetail": "保存しない場合、変更内容は失われます。"
   },
   "toolbar": {
     "edit": "編集",
