@@ -18,14 +18,15 @@ const {
 
 let mainWindow = null;
 let forceQuit = false;
+let ipcRegistered = false; // IPC handlers registered once globally
 
-function createWindow() {
+function createWindow(openFilePath) {
   // Initialize i18n (detects OS locale or stored preference)
   initLocale();
 
   const bounds = restoreWindowState();
 
-  mainWindow = new BrowserWindow({
+  const win = new BrowserWindow({
     ...bounds,
     minWidth: 600,
     minHeight: 400,
@@ -39,31 +40,41 @@ function createWindow() {
   });
 
   if (bounds.isMaximized) {
-    mainWindow.maximize();
+    win.maximize();
   }
 
-  mainWindow.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
+  win.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
+
+  // If a file path was passed, send it to renderer after load
+  if (openFilePath) {
+    win.webContents.once("did-finish-load", () => {
+      win.webContents.send("menu:action", "dropOpenFile:" + openFilePath);
+    });
+  }
+
+  // Per-window forceQuit flag
+  let windowForceQuit = false;
 
   // Close handler: intercept and ask renderer for dirty state
-  mainWindow.on("close", async (e) => {
-    saveWindowState(mainWindow);
+  win.on("close", async (e) => {
+    saveWindowState(win);
 
-    if (forceQuit) return; // Already confirmed, let it close
+    if (forceQuit || windowForceQuit) return; // Already confirmed, let it close
 
     e.preventDefault();
 
     try {
       // Ask renderer: are you dirty? do you have a file path?
-      const state = await mainWindow.webContents.executeJavaScript(
+      const state = await win.webContents.executeJavaScript(
         `window.__mdpadGetCloseState ? window.__mdpadGetCloseState() : { isDirty: false, hasFilePath: false, filePath: null }`
       );
 
       if (!state.isDirty) {
         // Clean — close immediately, clear session + autosave
-        forceQuit = true;
+        windowForceQuit = true;
         clearSession();
         clearAutosaveBackup();
-        mainWindow.close();
+        win.close();
         return;
       }
 
@@ -71,7 +82,7 @@ function createWindow() {
       let result;
       if (state.hasFilePath) {
         // Existing file: overwrite / save as / exit
-        result = await dialog.showMessageBox(mainWindow, {
+        result = await dialog.showMessageBox(win, {
           type: "warning",
           buttons: [
             t("dialog.closeExistingSave"),
@@ -87,17 +98,17 @@ function createWindow() {
 
         if (result.response === 0) {
           // Overwrite save
-          const content = await mainWindow.webContents.executeJavaScript(
+          const content = await win.webContents.executeJavaScript(
             `window.__mdpadGetContent ? window.__mdpadGetContent() : ""`
           );
           fs.writeFileSync(state.filePath, content, "utf-8");
-          forceQuit = true;
+          windowForceQuit = true;
           clearSession();
           clearAutosaveBackup();
-          mainWindow.close();
+          win.close();
         } else if (result.response === 1) {
           // Save As
-          const saveResult = await dialog.showSaveDialog(mainWindow, {
+          const saveResult = await dialog.showSaveDialog(win, {
             filters: [
               { name: t("dialog.filterMarkdown"), extensions: ["md"] },
               { name: t("dialog.filterText"), extensions: ["txt"] },
@@ -105,27 +116,27 @@ function createWindow() {
             ],
           });
           if (!saveResult.canceled) {
-            const content = await mainWindow.webContents.executeJavaScript(
+            const content = await win.webContents.executeJavaScript(
               `window.__mdpadGetContent ? window.__mdpadGetContent() : ""`
             );
             fs.writeFileSync(saveResult.filePath, content, "utf-8");
-            forceQuit = true;
+            windowForceQuit = true;
             clearSession();
             clearAutosaveBackup();
-            mainWindow.close();
+            win.close();
           }
           // If canceled, stay open
         } else if (result.response === 2) {
           // Exit without saving
-          forceQuit = true;
+          windowForceQuit = true;
           clearSession();
           clearAutosaveBackup();
-          mainWindow.close();
+          win.close();
         }
         // If dialog dismissed (Esc), stay open
       } else {
         // New file: save / exit
-        result = await dialog.showMessageBox(mainWindow, {
+        result = await dialog.showMessageBox(win, {
           type: "warning",
           buttons: [
             t("dialog.closeNewSave"),
@@ -140,7 +151,7 @@ function createWindow() {
 
         if (result.response === 0) {
           // Save (new file → Save As dialog)
-          const saveResult = await dialog.showSaveDialog(mainWindow, {
+          const saveResult = await dialog.showSaveDialog(win, {
             filters: [
               { name: t("dialog.filterMarkdown"), extensions: ["md"] },
               { name: t("dialog.filterText"), extensions: ["txt"] },
@@ -148,88 +159,108 @@ function createWindow() {
             ],
           });
           if (!saveResult.canceled) {
-            const content = await mainWindow.webContents.executeJavaScript(
+            const content = await win.webContents.executeJavaScript(
               `window.__mdpadGetContent ? window.__mdpadGetContent() : ""`
             );
             fs.writeFileSync(saveResult.filePath, content, "utf-8");
-            forceQuit = true;
+            windowForceQuit = true;
             clearSession();
             clearAutosaveBackup();
-            mainWindow.close();
+            win.close();
           }
           // If canceled, stay open
         } else if (result.response === 1) {
           // Exit without saving
-          forceQuit = true;
+          windowForceQuit = true;
           clearSession();
           clearAutosaveBackup();
-          mainWindow.close();
+          win.close();
         }
         // If dialog dismissed (Esc), stay open
       }
     } catch (err) {
       // If communication fails, allow close
-      forceQuit = true;
-      mainWindow.close();
+      windowForceQuit = true;
+      win.close();
     }
   });
 
-  mainWindow.on("closed", () => {
-    mainWindow = null;
+  win.on("closed", () => {
+    if (win === mainWindow) {
+      mainWindow = null;
+    }
   });
 
-  createMenu(mainWindow);
-  registerIpcHandlers(mainWindow);
+  createMenu(win);
+  registerIpcHandlers(win);
 
-  // Initialize session manager for crash recovery
-  initSessionManager();
+  // Initialize session manager for crash recovery (once)
+  if (!ipcRegistered) {
+    initSessionManager();
+    initAutosaveManager();
 
-  // Initialize autosave manager
-  initAutosaveManager();
+    // IPC: get current locale for renderer
+    ipcMain.handle("i18n:getLocale", () => getLocale());
+    ipcMain.handle("i18n:getSupportedLocales", () => getSupportedLocales());
+    ipcMain.handle("i18n:setLocale", (_event, locale) => {
+      setLocale(locale);
+      // Rebuild menu for all windows
+      for (const w of BrowserWindow.getAllWindows()) {
+        createMenu(w);
+      }
+    });
 
-  // IPC: get current locale for renderer
-  ipcMain.handle("i18n:getLocale", () => getLocale());
-  ipcMain.handle("i18n:getSupportedLocales", () => getSupportedLocales());
-  ipcMain.handle("i18n:setLocale", (_event, locale) => {
-    setLocale(locale);
-    // Rebuild menu with new locale
-    createMenu(mainWindow);
-  });
+    // IPC: session save (called periodically from renderer)
+    ipcMain.handle("session:save", (_event, sessionData) => {
+      saveSession(sessionData);
+    });
 
-  // IPC: session save (called periodically from renderer)
-  ipcMain.handle("session:save", (_event, sessionData) => {
-    saveSession(sessionData);
-  });
+    // IPC: get session data for recovery
+    ipcMain.handle("session:getRecovery", () => {
+      return loadRecoverySessions();
+    });
 
-  // IPC: get session data for recovery
-  ipcMain.handle("session:getRecovery", () => {
-    return loadRecoverySessions();
-  });
+    // IPC: clear session after successful save/close
+    ipcMain.handle("session:clear", () => {
+      clearSession();
+    });
 
-  // IPC: clear session after successful save/close
-  ipcMain.handle("session:clear", () => {
-    clearSession();
-  });
+    // IPC: autosave
+    ipcMain.handle("autosave:getMinutes", () => getAutosaveMinutes());
+    ipcMain.handle("autosave:setMinutes", (_event, minutes) => {
+      setAutosaveMinutes(minutes);
+      // Rebuild menu for all windows
+      for (const w of BrowserWindow.getAllWindows()) {
+        createMenu(w);
+      }
+    });
+    ipcMain.handle("autosave:save", (_event, data) => {
+      saveAutosaveBackup(data);
+    });
+    ipcMain.handle("autosave:clear", () => {
+      clearAutosaveBackup();
+    });
+    ipcMain.handle("autosave:getOrphaned", () => {
+      return loadOrphanedAutosaves();
+    });
+    ipcMain.handle("autosave:removeOrphaned", (_event, backupFilePath) => {
+      removeOrphanedBackup(backupFilePath);
+    });
 
-  // IPC: autosave
-  ipcMain.handle("autosave:getMinutes", () => getAutosaveMinutes());
-  ipcMain.handle("autosave:setMinutes", (_event, minutes) => {
-    setAutosaveMinutes(minutes);
-    // Rebuild menu to update checkmark
-    createMenu(mainWindow);
-  });
-  ipcMain.handle("autosave:save", (_event, data) => {
-    saveAutosaveBackup(data);
-  });
-  ipcMain.handle("autosave:clear", () => {
-    clearAutosaveBackup();
-  });
-  ipcMain.handle("autosave:getOrphaned", () => {
-    return loadOrphanedAutosaves();
-  });
-  ipcMain.handle("autosave:removeOrphaned", (_event, backupFilePath) => {
-    removeOrphanedBackup(backupFilePath);
-  });
+    // IPC: open file in new window (for drag-and-drop)
+    ipcMain.handle("drop:openInNewWindow", (_event, filePath) => {
+      createWindow(filePath);
+    });
+
+    ipcRegistered = true;
+  }
+
+  // Track the first window as mainWindow
+  if (!mainWindow) {
+    mainWindow = win;
+  }
+
+  return win;
 }
 
 function clearSession() {

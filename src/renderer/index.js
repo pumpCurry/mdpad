@@ -138,6 +138,9 @@ async function init() {
   // Update title
   updateTitle();
 
+  // Set up drag-and-drop
+  initDragAndDrop();
+
   // Focus editor
   focus();
 }
@@ -179,6 +182,13 @@ async function handleMenuAction(action) {
     setLocale(newLocale);
     // Also persist on main process side (already done via menu click)
     await window.mdpad.setLocale(newLocale);
+    return;
+  }
+
+  // Handle file opened in new window via drag-drop
+  if (action.startsWith("dropOpenFile:")) {
+    const filePath = action.substring("dropOpenFile:".length);
+    await loadFileByPath(filePath);
     return;
   }
 
@@ -330,6 +340,111 @@ async function saveFileAs() {
   await window.mdpad.clearSession();
   await window.mdpad.clearAutosaveBackup();
   return true;
+}
+
+// --- Load file by path (used by drag-drop new window) ---
+
+async function loadFileByPath(filePath) {
+  const result = await window.mdpad.openFileByPath(filePath);
+  if (!result) return;
+
+  currentFilePath = result.path;
+  originalContent = result.content;
+  isDirty = false;
+  setContent(result.content);
+  setOriginalContent(result.content);
+  updateTitle();
+  await window.mdpad.clearSession();
+  await window.mdpad.clearAutosaveBackup();
+
+  const state = getPaneState();
+  if (state.preview) updatePreviewImmediate(result.content);
+  if (state.diff) updateDiff(result.content, originalContent);
+}
+
+// --- Drag-and-drop ---
+
+function initDragAndDrop() {
+  const editorPaneEl = document.getElementById("editor-pane");
+
+  // Prevent default browser drag behavior globally
+  document.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  });
+
+  document.addEventListener("dragenter", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  });
+
+  document.addEventListener("drop", async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const files = e.dataTransfer?.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+
+    // Determine if the drop landed on the CodeMirror editor area
+    const droppedOnEditor = isInsideEditor(e.target, editorPaneEl);
+
+    if (droppedOnEditor) {
+      // --- Insert mode: read file content and insert at cursor/drop position ---
+      try {
+        const text = await readFileAsText(file);
+        const editor = getEditor();
+        if (editor) {
+          // Try to get drop position from CodeMirror
+          const pos = editor.posAtCoords({ x: e.clientX, y: e.clientY });
+          const insertPos = pos != null ? pos : editor.state.selection.main.head;
+          editor.dispatch({
+            changes: { from: insertPos, insert: text },
+            selection: { anchor: insertPos + text.length },
+          });
+          editor.focus();
+        }
+      } catch {
+        // Non-text file — ignore
+      }
+    } else {
+      // --- Open mode: open file in a new window ---
+      // Use the file path from dataTransfer (Electron provides the full path)
+      const filePath = file.path;
+      if (filePath) {
+        await window.mdpad.openFileInNewWindow(filePath);
+      }
+    }
+  });
+}
+
+/**
+ * Check if an element is inside the CodeMirror editor DOM
+ */
+function isInsideEditor(target, editorPaneEl) {
+  if (!target || !editorPaneEl) return false;
+  // Walk up from the drop target to see if it's inside the editor pane
+  let el = target;
+  while (el) {
+    if (el === editorPaneEl) return true;
+    // Also check for CodeMirror's internal classes
+    if (el.classList && el.classList.contains("cm-editor")) return true;
+    el = el.parentElement;
+  }
+  return false;
+}
+
+/**
+ * Read a File object as UTF-8 text
+ */
+function readFileAsText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(file, "utf-8");
+  });
 }
 
 // --- Session management for crash recovery ---
