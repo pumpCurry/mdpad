@@ -85,7 +85,13 @@
     "regexp": "regexp",
     "replaceBtn": "replace",
     "replaceAll": "replace all",
-    "close": "close"
+    "close": "close",
+    "matchCount": "{count} hits",
+    "replacedCount": "Replaced {replaced}. {count} hits"
+  },
+  "dnd": {
+    "insertMode": "DnD Insert",
+    "tipInsertMode": "ON: drop inserts content into editor / OFF: drop opens file"
   },
   "globalSearch": {
     "placeholder": "Search across panes...",

@@ -55,3 +55,23 @@
 #editor-pane .cm-editor .cm-searchMatch-selected {
   background: #ffd33d;
 }
+
+/* Search match count info */
+.cm-search-match-info {
+  display: inline-block;
+  font-size: 11px;
+  color: #57606a;
+  padding: 2px 8px;
+  white-space: nowrap;
+  min-width: 60px;
+  vertical-align: middle;
+}
+
+.cm-search-match-info.no-results {
+  color: #cf222e;
+}
+
+.cm-search-match-info.replaced {
+  color: #1a7f37;
+  font-weight: 600;
+}

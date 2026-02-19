@@ -14,7 +14,7 @@ import {
 } from "@codemirror/view";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
-import { search, openSearchPanel } from "@codemirror/search";
+import { search, openSearchPanel, getSearchQuery, SearchCursor, RegExpCursor } from "@codemirror/search";
 import {
   indentWithTab,
   history,
@@ -96,6 +96,191 @@ function getSearchPhrases() {
   };
 }
 
+// --- Search match count tracking ---
+let lastSearchQuery = "";
+let lastSearchFlags = "";
+let lastMatchCount = 0;
+let pendingReplacedCount = 0;
+let matchInfoTimer = null;
+let replacedDisplayTimer = null;
+
+/**
+ * ViewPlugin that monitors the CodeMirror search query and counts matches.
+ * Injects a match-count display element into the search panel DOM.
+ * Automatically detects replace operations by watching count changes
+ * when the search query hasn't changed but doc length did.
+ */
+function searchMatchCountPlugin() {
+  return ViewPlugin.fromClass(
+    class {
+      constructor(view) {
+        this.view = view;
+        this.infoEl = null;
+        this.prevQueryStr = "";
+        this.prevFlags = "";
+        this.prevDocLen = 0;
+        this.scheduleCheck();
+      }
+
+      update(update) {
+        // Check on any doc change or effects (search query change opens panel, etc.)
+        if (update.docChanged || update.transactions.some(tr => tr.effects.length > 0)) {
+          this.scheduleCheck();
+        }
+      }
+
+      scheduleCheck() {
+        if (matchInfoTimer) clearTimeout(matchInfoTimer);
+        matchInfoTimer = setTimeout(() => this.checkAndUpdate(), 50);
+      }
+
+      checkAndUpdate() {
+        const view = this.view;
+        const query = getSearchQuery(view.state);
+        const queryStr = query.search || "";
+        const flags = `${query.caseSensitive ? "c" : ""}${query.regexp ? "r" : ""}${query.wholeWord ? "w" : ""}`;
+        const docLen = view.state.doc.length;
+
+        // Ensure the info element exists in the search panel
+        this.ensureInfoElement();
+
+        if (!queryStr || !query.valid) {
+          if (this.infoEl) this.infoEl.textContent = "";
+          lastSearchQuery = "";
+          lastSearchFlags = "";
+          lastMatchCount = 0;
+          return;
+        }
+
+        // Detect what changed
+        const queryChanged = queryStr !== this.prevQueryStr || flags !== this.prevFlags;
+        const docChanged = docLen !== this.prevDocLen;
+
+        if (!queryChanged && !docChanged) return; // Nothing changed
+
+        const prevCount = lastMatchCount;
+        const count = this.countMatches(view, query);
+
+        // Detect replace: same query, doc changed, count decreased
+        const isReplace = !queryChanged && docChanged && prevCount > count;
+
+        lastMatchCount = count;
+        lastSearchQuery = queryStr;
+        lastSearchFlags = flags;
+        this.prevQueryStr = queryStr;
+        this.prevFlags = flags;
+        this.prevDocLen = docLen;
+
+        if (isReplace) {
+          const replaced = prevCount - count;
+          pendingReplacedCount += replaced;
+
+          // Show replaced info
+          this.showReplacedInfo(pendingReplacedCount, count);
+
+          // Reset replaced display after 5 seconds
+          if (replacedDisplayTimer) clearTimeout(replacedDisplayTimer);
+          replacedDisplayTimer = setTimeout(() => {
+            pendingReplacedCount = 0;
+            if (this.infoEl && this.view.dom.querySelector(".cm-search")) {
+              const currentCount = this.countMatches(this.view, getSearchQuery(this.view.state));
+              lastMatchCount = currentCount;
+              this.showMatchCount(currentCount);
+            }
+          }, 5000);
+        } else {
+          // Normal: query changed or doc changed for non-replace reason
+          pendingReplacedCount = 0;
+          if (replacedDisplayTimer) clearTimeout(replacedDisplayTimer);
+          this.showMatchCount(count);
+        }
+      }
+
+      countMatches(view, query) {
+        const doc = view.state.doc;
+        const searchStr = query.search;
+        if (!searchStr) return 0;
+
+        let count = 0;
+        try {
+          if (query.regexp) {
+            const cursor = new RegExpCursor(doc, searchStr, { ignoreCase: !query.caseSensitive }, 0, doc.length);
+            while (!cursor.next().done) {
+              count++;
+              if (count > 99999) break; // Safety limit
+            }
+          } else {
+            // Plain text search
+            const text = query.caseSensitive ? doc.toString() : doc.toString().toLowerCase();
+            const q = query.caseSensitive ? searchStr : searchStr.toLowerCase();
+            let idx = 0;
+            while (idx < text.length) {
+              const found = text.indexOf(q, idx);
+              if (found === -1) break;
+              count++;
+              idx = found + 1;
+              if (count > 99999) break;
+            }
+          }
+        } catch {
+          // Invalid regex etc.
+        }
+        return count;
+      }
+
+      ensureInfoElement() {
+        // Find the CodeMirror search panel
+        const panel = this.view.dom.querySelector(".cm-search");
+        if (!panel) {
+          this.infoEl = null;
+          return;
+        }
+        // Check if our info element already exists
+        let existing = panel.querySelector(".cm-search-match-info");
+        if (existing) {
+          this.infoEl = existing;
+          return;
+        }
+        // Create and insert the info element
+        const el = document.createElement("span");
+        el.className = "cm-search-match-info";
+        // Insert before the close button (last button in panel)
+        const closeBtn = panel.querySelector("button[name=close]");
+        if (closeBtn) {
+          closeBtn.parentNode.insertBefore(el, closeBtn);
+        } else {
+          panel.appendChild(el);
+        }
+        this.infoEl = el;
+      }
+
+      showMatchCount(count) {
+        if (!this.infoEl) return;
+        const tmpl = t("search.matchCount");
+        this.infoEl.textContent = tmpl.replace("{count}", count);
+        this.infoEl.classList.toggle("no-results", count === 0 && lastSearchQuery.length > 0);
+        this.infoEl.classList.remove("replaced");
+      }
+
+      showReplacedInfo(replaced, count) {
+        if (!this.infoEl) return;
+        const tmpl = t("search.replacedCount");
+        this.infoEl.textContent = tmpl
+          .replace("{replaced}", replaced)
+          .replace("{count}", count);
+        this.infoEl.classList.toggle("no-results", false);
+        this.infoEl.classList.add("replaced");
+      }
+
+      destroy() {
+        if (this.infoEl && this.infoEl.parentNode) {
+          this.infoEl.remove();
+        }
+      }
+    }
+  );
+}
+
 export function createEditor(container, onChange) {
   onChangeCallback = onChange;
 
@@ -135,6 +320,7 @@ export function createEditor(container, onChange) {
     keymap.of([indentWithTab]),
     wrapCompartment.of(EditorView.lineWrapping),
     rulerPlugin(80),
+    searchMatchCountPlugin(),
     EditorView.updateListener.of((update) => {
       if (update.docChanged && onChangeCallback) {
         onChangeCallback(update.state.doc.toString());

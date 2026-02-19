@@ -14,6 +14,7 @@ let toggles = { editor: true, preview: true, diff: true };
 let currentQuery = "";
 let debounceTimer = null;
 let updateTimer = null;
+let dndInsertMode = false; // false = drop opens file (default OFF)
 
 // CodeMirror decoration effect for highlighting search matches
 const setSearchHighlights = StateEffect.define();
@@ -81,18 +82,24 @@ export function initGlobalSearch() {
 /**
  * Called externally when content changes (editor edit, replace, diff file change, etc.)
  * This replaces the old 500ms polling setInterval.
+ * Uses a longer debounce (200ms) to ensure document is settled after replace operations.
  */
 export function triggerGlobalSearchUpdate() {
   if (!currentQuery) return;
-  // Debounce to avoid excessive updates during rapid typing
+  // Debounce: 200ms to ensure post-replace DOM/state is settled
   if (updateTimer) clearTimeout(updateTimer);
   updateTimer = setTimeout(() => {
     performSearch();
-  }, 100);
+  }, 200);
 }
 
 function buildHTML() {
   return `
+    <label class="gs-dnd-toggle" title="${t("dnd.tipInsertMode")}">
+      <input type="checkbox" class="gs-dnd-checkbox" ${dndInsertMode ? "checked" : ""} />
+      <span class="gs-dnd-label">${t("dnd.insertMode")}</span>
+    </label>
+    <div class="gs-separator"></div>
     <input type="text" class="gs-input" placeholder="${t("globalSearch.placeholder")}" />
     <div class="gs-toggles">
       <button class="gs-toggle ${toggles.editor ? "active" : ""}" data-pane="editor" title="${t("globalSearch.editor")}">${t("globalSearch.editor")}</button>
@@ -106,6 +113,14 @@ function buildHTML() {
 function bindEvents() {
   searchInput = searchBarEl.querySelector(".gs-input");
   hitCountEl = searchBarEl.querySelector(".gs-hit-count");
+
+  // DnD insert mode toggle
+  const dndCheckbox = searchBarEl.querySelector(".gs-dnd-checkbox");
+  if (dndCheckbox) {
+    dndCheckbox.addEventListener("change", () => {
+      dndInsertMode = dndCheckbox.checked;
+    });
+  }
 
   // Input handler with debounce
   searchInput.addEventListener("input", () => {
@@ -316,4 +331,13 @@ function clearAllHighlights() {
   clearEditorHighlights();
   clearDOMHighlights(document.querySelector("#preview-pane .preview-content"));
   clearDOMHighlights(document.querySelector("#diff-pane .diff-content"));
+}
+
+/**
+ * Returns whether DnD insert mode is active.
+ * When false (default), drops anywhere open the file.
+ * When true, drops on editor insert content, drops elsewhere open the file.
+ */
+export function isDndInsertMode() {
+  return dndInsertMode;
 }

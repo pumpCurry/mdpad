@@ -19,7 +19,7 @@ import {
 } from "./components/pane-manager.js";
 import { initToolbar, updateButtonStates } from "./components/toolbar.js";
 import { initStatusBar, updateStatusBar } from "./components/status-bar.js";
-import { initGlobalSearch, triggerGlobalSearchUpdate } from "./components/global-search.js";
+import { initGlobalSearch, triggerGlobalSearchUpdate, isDndInsertMode } from "./components/global-search.js";
 import { syncEditorToPreview } from "./lib/scroll-sync.js";
 import { initI18n, t, setLocale, onLocaleChange } from "../i18n/i18n-renderer.js";
 
@@ -387,10 +387,10 @@ function initDragAndDrop() {
 
     const file = files[0];
 
-    // Determine if the drop landed on the CodeMirror editor area
-    const droppedOnEditor = isInsideEditor(e.target, editorPaneEl);
-
-    if (droppedOnEditor) {
+    // DnD Insert Mode toggle:
+    //   OFF (default): ALL drops anywhere open the file in a new window
+    //   ON: drops on editor insert content, drops elsewhere open the file
+    if (isDndInsertMode() && isInsideEditor(e.target, editorPaneEl)) {
       // --- Insert mode: read file content and insert at cursor/drop position ---
       try {
         const text = await readFileAsText(file);

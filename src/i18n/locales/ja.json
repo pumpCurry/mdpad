@@ -85,7 +85,13 @@
     "regexp": "正規表現",
     "replaceBtn": "置換",
     "replaceAll": "すべて置換",
-    "close": "閉じる"
+    "close": "閉じる",
+    "matchCount": "{count} 件",
+    "replacedCount": "{replaced}件置き換えました。 {count} 件"
+  },
+  "dnd": {
+    "insertMode": "DnD挿入",
+    "tipInsertMode": "ON: エディタにドロップで内容挿入 / OFF: ドロップでファイルを開く"
   },
   "globalSearch": {
     "placeholder": "ペイン横断検索...",
