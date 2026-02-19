@@ -11,6 +11,9 @@
     "file_open": "開く...",
     "file_save": "保存",
     "file_saveAs": "名前を付けて保存...",
+    "file_autosave": "自動バックアップ",
+    "autosave_off": "OFF",
+    "autosave_min": "分",
     "file_exit": "終了",
     "edit": "編集",
     "edit_undo": "元に戻す",
@@ -46,7 +49,10 @@
     "closeExistingSaveAs": "新規保存する(&A)",
     "closeExistingExit": "保存せず終了する(&E)",
     "closeMessage": "変更を保存しますか？",
-    "closeDetail": "保存しない場合、変更内容は失われます。"
+    "closeDetail": "保存しない場合、変更内容は失われます。",
+    "recoveryTitle": "未保存の内容を復元しますか？",
+    "recoveryMessageFile": "未保存の変更を復元:",
+    "recoveryMessageNew": "前回のセッションの未保存コンテンツを復元"
   },
   "toolbar": {
     "edit": "編集",

@@ -6,6 +6,15 @@ const { createMenu } = require("./menu");
 const { restoreWindowState, saveWindowState } = require("./window-state");
 const { initLocale, getLocale, setLocale, getSupportedLocales, t } = require("../i18n/i18n-main");
 const { initSessionManager, saveSession, getSessionDir } = require("./session-manager");
+const {
+  initAutosaveManager,
+  getAutosaveMinutes,
+  setAutosaveMinutes,
+  saveAutosaveBackup,
+  clearAutosaveBackup,
+  loadOrphanedAutosaves,
+  removeOrphanedBackup,
+} = require("./autosave-manager");
 
 let mainWindow = null;
 let forceQuit = false;
@@ -50,9 +59,10 @@ function createWindow() {
       );
 
       if (!state.isDirty) {
-        // Clean — close immediately, clear session
+        // Clean — close immediately, clear session + autosave
         forceQuit = true;
         clearSession();
+        clearAutosaveBackup();
         mainWindow.close();
         return;
       }
@@ -83,6 +93,7 @@ function createWindow() {
           fs.writeFileSync(state.filePath, content, "utf-8");
           forceQuit = true;
           clearSession();
+          clearAutosaveBackup();
           mainWindow.close();
         } else if (result.response === 1) {
           // Save As
@@ -100,6 +111,7 @@ function createWindow() {
             fs.writeFileSync(saveResult.filePath, content, "utf-8");
             forceQuit = true;
             clearSession();
+            clearAutosaveBackup();
             mainWindow.close();
           }
           // If canceled, stay open
@@ -107,6 +119,7 @@ function createWindow() {
           // Exit without saving
           forceQuit = true;
           clearSession();
+          clearAutosaveBackup();
           mainWindow.close();
         }
         // If dialog dismissed (Esc), stay open
@@ -141,6 +154,7 @@ function createWindow() {
             fs.writeFileSync(saveResult.filePath, content, "utf-8");
             forceQuit = true;
             clearSession();
+            clearAutosaveBackup();
             mainWindow.close();
           }
           // If canceled, stay open
@@ -148,6 +162,7 @@ function createWindow() {
           // Exit without saving
           forceQuit = true;
           clearSession();
+          clearAutosaveBackup();
           mainWindow.close();
         }
         // If dialog dismissed (Esc), stay open
@@ -168,6 +183,9 @@ function createWindow() {
 
   // Initialize session manager for crash recovery
   initSessionManager();
+
+  // Initialize autosave manager
+  initAutosaveManager();
 
   // IPC: get current locale for renderer
   ipcMain.handle("i18n:getLocale", () => getLocale());
@@ -191,6 +209,26 @@ function createWindow() {
   // IPC: clear session after successful save/close
   ipcMain.handle("session:clear", () => {
     clearSession();
+  });
+
+  // IPC: autosave
+  ipcMain.handle("autosave:getMinutes", () => getAutosaveMinutes());
+  ipcMain.handle("autosave:setMinutes", (_event, minutes) => {
+    setAutosaveMinutes(minutes);
+    // Rebuild menu to update checkmark
+    createMenu(mainWindow);
+  });
+  ipcMain.handle("autosave:save", (_event, data) => {
+    saveAutosaveBackup(data);
+  });
+  ipcMain.handle("autosave:clear", () => {
+    clearAutosaveBackup();
+  });
+  ipcMain.handle("autosave:getOrphaned", () => {
+    return loadOrphanedAutosaves();
+  });
+  ipcMain.handle("autosave:removeOrphaned", (_event, backupFilePath) => {
+    removeOrphanedBackup(backupFilePath);
   });
 }
 

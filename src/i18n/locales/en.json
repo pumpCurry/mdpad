@@ -11,6 +11,9 @@
     "file_open": "Open...",
     "file_save": "Save",
     "file_saveAs": "Save As...",
+    "file_autosave": "Auto Backup",
+    "autosave_off": "OFF",
+    "autosave_min": "min",
     "file_exit": "Exit",
     "edit": "Edit",
     "edit_undo": "Undo",
@@ -46,7 +49,10 @@
     "closeExistingSaveAs": "Save &As...",
     "closeExistingExit": "&Exit without saving",
     "closeMessage": "Do you want to save changes?",
-    "closeDetail": "Your changes will be lost if you don't save them."
+    "closeDetail": "Your changes will be lost if you don't save them.",
+    "recoveryTitle": "Recover unsaved content?",
+    "recoveryMessageFile": "Recovered unsaved changes for:",
+    "recoveryMessageNew": "Recovered unsaved content from a previous session"
   },
   "toolbar": {
     "edit": "Edit",

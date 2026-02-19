@@ -28,8 +28,12 @@ let currentFilePath = null;
 let originalContent = "";
 let isDirty = false;
 
-// Session auto-save interval (ms)
+// Session auto-save interval (ms) — lightweight, always on
 const SESSION_SAVE_INTERVAL = 5000;
+
+// Autosave (backup) state
+let autosaveMinutes = 0; // 0 = OFF
+let autosaveTimer = null;
 
 // Initialize components
 async function init() {
@@ -117,14 +121,18 @@ async function init() {
   // Expose content getter for main process save-on-close
   window.__mdpadGetContent = () => getContent();
 
-  // Session auto-save for crash recovery
+  // Session auto-save for crash recovery (lightweight, always on)
   setInterval(() => {
     if (isDirty) {
       saveSessionState();
     }
   }, SESSION_SAVE_INTERVAL);
 
-  // Check for crash recovery sessions
+  // Initialize autosave (backup) timer
+  autosaveMinutes = await window.mdpad.getAutosaveMinutes();
+  startAutosaveTimer();
+
+  // Check for crash recovery: sessions first, then autosave backups
   await checkRecovery();
 
   // Update title
@@ -171,6 +179,15 @@ async function handleMenuAction(action) {
     setLocale(newLocale);
     // Also persist on main process side (already done via menu click)
     await window.mdpad.setLocale(newLocale);
+    return;
+  }
+
+  // Handle autosave interval change from menu
+  if (action.startsWith("setAutosave:")) {
+    const minutes = parseInt(action.split(":")[1], 10);
+    autosaveMinutes = minutes;
+    await window.mdpad.setAutosaveMinutes(minutes);
+    startAutosaveTimer();
     return;
   }
 
@@ -251,6 +268,7 @@ async function newFile() {
   setOriginalContent("");
   updateTitle();
   await window.mdpad.clearSession();
+  await window.mdpad.clearAutosaveBackup();
 
   const state = getPaneState();
   if (state.preview) updatePreviewImmediate("");
@@ -278,6 +296,7 @@ async function openFile() {
   setOriginalContent(result.content);
   updateTitle();
   await window.mdpad.clearSession();
+  await window.mdpad.clearAutosaveBackup();
 
   const state = getPaneState();
   if (state.preview) updatePreviewImmediate(result.content);
@@ -295,6 +314,7 @@ async function saveFile() {
   isDirty = false;
   updateTitle();
   await window.mdpad.clearSession();
+  await window.mdpad.clearAutosaveBackup();
   return true;
 }
 
@@ -308,6 +328,7 @@ async function saveFileAs() {
   isDirty = false;
   updateTitle();
   await window.mdpad.clearSession();
+  await window.mdpad.clearAutosaveBackup();
   return true;
 }
 
@@ -326,13 +347,82 @@ function saveSessionState() {
   }
 }
 
+// --- Autosave (backup) ---
+
+function startAutosaveTimer() {
+  // Clear existing timer
+  if (autosaveTimer) {
+    clearInterval(autosaveTimer);
+    autosaveTimer = null;
+  }
+
+  if (autosaveMinutes <= 0) return; // OFF
+
+  const intervalMs = autosaveMinutes * 60 * 1000;
+  autosaveTimer = setInterval(() => {
+    if (isDirty) {
+      performAutosaveBackup();
+    }
+  }, intervalMs);
+}
+
+function performAutosaveBackup() {
+  try {
+    window.mdpad.saveAutosaveBackup({
+      content: getContent(),
+      filePath: currentFilePath,
+      originalContent: originalContent,
+      isDirty,
+      timestamp: Date.now(),
+    });
+  } catch {
+    // Ignore
+  }
+}
+
+// --- Recovery: check for orphaned sessions and autosave backups ---
+
 async function checkRecovery() {
   try {
+    // 1. Check session files (lightweight crash recovery)
     const sessions = await window.mdpad.getRecoverySessions();
-    if (!sessions || sessions.length === 0) return;
 
-    // Recover the most recent session
-    const latest = sessions.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0))[0];
+    // 2. Check autosave backups (more comprehensive, includes originalContent)
+    const autosaves = await window.mdpad.getOrphanedAutosaves();
+
+    // Merge: prefer autosave backup (has originalContent for diff), fall back to session
+    const allRecoveries = [];
+
+    if (autosaves && autosaves.length > 0) {
+      for (const backup of autosaves) {
+        allRecoveries.push({
+          ...backup,
+          source: "autosave",
+        });
+      }
+    }
+
+    if (sessions && sessions.length > 0) {
+      for (const session of sessions) {
+        // Don't add if we already have an autosave for the same file
+        const alreadyHas = allRecoveries.some(
+          (r) => r.filePath && r.filePath === session.filePath
+        );
+        if (!alreadyHas) {
+          allRecoveries.push({
+            ...session,
+            source: "session",
+          });
+        }
+      }
+    }
+
+    if (allRecoveries.length === 0) return;
+
+    // Recover the most recent one
+    const latest = allRecoveries.sort(
+      (a, b) => (b.savedAt || 0) - (a.savedAt || 0)
+    )[0];
     if (!latest || !latest.content) return;
 
     const fileName = latest.filePath
@@ -342,9 +432,9 @@ async function checkRecovery() {
     // Ask user if they want to recover
     const recover = confirm(
       `${t("app.name")}: ${fileName}\n\n` +
-      (latest.filePath
-        ? `Recovered unsaved changes for: ${fileName}`
-        : `Recovered unsaved content from a previous session`)
+        (latest.filePath
+          ? `${t("dialog.recoveryMessageFile")} ${fileName}`
+          : t("dialog.recoveryMessageNew"))
     );
 
     if (recover) {
@@ -352,8 +442,13 @@ async function checkRecovery() {
         currentFilePath = latest.filePath;
       }
       setContent(latest.content);
-      if (latest.filePath) {
-        // Try to load original for diff comparison
+
+      // Restore original content for diff:
+      // prefer autosave's stored originalContent, then try loading from file
+      if (latest.source === "autosave" && latest.originalContent) {
+        originalContent = latest.originalContent;
+        setOriginalContent(latest.originalContent);
+      } else if (latest.filePath) {
         try {
           const orig = await window.mdpad.openFileByPath(latest.filePath);
           if (orig) {
@@ -364,6 +459,7 @@ async function checkRecovery() {
           // Ignore
         }
       }
+
       isDirty = true;
       updateTitle();
       const state = getPaneState();
@@ -371,10 +467,18 @@ async function checkRecovery() {
       if (state.diff) updateDiff(latest.content, originalContent);
     }
 
-    // Clean up all recovered session files
-    // (The main process handles file deletion via session:clear
-    //  but we also need to remove orphaned files that were loaded)
-    // This is handled in main.js loadRecoverySessions which marks _sessionFile
+    // Clean up all orphaned files
+    if (autosaves) {
+      for (const backup of autosaves) {
+        if (backup._backupFile) {
+          await window.mdpad.removeOrphanedBackup(backup._backupFile);
+        }
+      }
+    }
+    if (sessions) {
+      // Sessions are cleaned via session:clear, but orphaned ones need explicit cleanup
+      // The main process already handles this in loadRecoverySessions
+    }
   } catch {
     // Ignore recovery errors
   }

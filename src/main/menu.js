@@ -1,5 +1,6 @@
 const { Menu } = require("electron");
 const { t, getLocale, setLocale, getSupportedLocales } = require("../i18n/i18n-main");
+const { getAutosaveMinutes } = require("./autosave-manager");
 
 const localeLabels = {
   en: "English",
@@ -8,6 +9,7 @@ const localeLabels = {
 
 function createMenu(mainWindow) {
   const currentLocale = getLocale();
+  const currentAutosave = getAutosaveMinutes();
 
   // Build language submenu
   const langSubmenu = getSupportedLocales().map((loc) => ({
@@ -18,6 +20,17 @@ function createMenu(mainWindow) {
       setLocale(loc);
       createMenu(mainWindow); // Rebuild menu
       mainWindow.webContents.send("menu:action", "changeLocale:" + loc);
+    },
+  }));
+
+  // Build autosave submenu: OFF, 1, 2, 3, 5, 10, 15, 30, 60 min
+  const autosaveOptions = [0, 1, 2, 3, 5, 10, 15, 30, 60];
+  const autosaveSubmenu = autosaveOptions.map((min) => ({
+    label: min === 0 ? t("menu.autosave_off") : `${min} ${t("menu.autosave_min")}`,
+    type: "radio",
+    checked: currentAutosave === min,
+    click: () => {
+      mainWindow.webContents.send("menu:action", "setAutosave:" + min);
     },
   }));
 
@@ -45,6 +58,11 @@ function createMenu(mainWindow) {
           label: t("menu.file_saveAs"),
           accelerator: "CmdOrCtrl+Shift+S",
           click: () => mainWindow.webContents.send("menu:action", "saveAs"),
+        },
+        { type: "separator" },
+        {
+          label: t("menu.file_autosave"),
+          submenu: autosaveSubmenu,
         },
         { type: "separator" },
         {

@@ -26,6 +26,14 @@ contextBridge.exposeInMainWorld("mdpad", {
   getRecoverySessions: () => ipcRenderer.invoke("session:getRecovery"),
   clearSession: () => ipcRenderer.invoke("session:clear"),
 
+  // Autosave (backup)
+  getAutosaveMinutes: () => ipcRenderer.invoke("autosave:getMinutes"),
+  setAutosaveMinutes: (minutes) => ipcRenderer.invoke("autosave:setMinutes", minutes),
+  saveAutosaveBackup: (data) => ipcRenderer.invoke("autosave:save", data),
+  clearAutosaveBackup: () => ipcRenderer.invoke("autosave:clear"),
+  getOrphanedAutosaves: () => ipcRenderer.invoke("autosave:getOrphaned"),
+  removeOrphanedBackup: (path) => ipcRenderer.invoke("autosave:removeOrphaned", path),
+
   // Menu actions (main -> renderer)
   onMenuAction: (callback) => {
     const listener = (_event, action) => callback(action);

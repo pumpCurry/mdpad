@@ -1,0 +1,35 @@
+appId: com.pumpcurry.mdpad
+productName: mdpad
+copyright: "(C) pumpCurry, 5r4ce2"
+
+directories:
+  output: build
+
+files:
+  - src/**/*
+  - dist/**/*
+  - package.json
+  - "!**/*.map"
+  - "!**/node_modules/**"
+
+# Don't use asar — our renderer loads CSS files via <link> with relative paths
+asar: false
+
+win:
+  target:
+    - target: dir
+      arch:
+        - x64
+  icon: assets/icons/icon.png
+
+portable:
+  artifactName: "mdpad-${version}-portable.exe"
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  artifactName: "mdpad-${version}-setup.exe"
+
+# Build portable zip:
+# npm run build:zip
