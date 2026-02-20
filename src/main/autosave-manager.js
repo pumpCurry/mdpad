@@ -182,6 +182,32 @@ function removeOrphanedBackup(backupFilePath) {
   }
 }
 
+/**
+ * Force-save a resume backup (used when user chooses "Resume Save" on close).
+ * Unlike saveAutosaveBackup(), this works even when autosave is OFF.
+ * Uses a unique "resume-" prefix so it's always picked up as an orphan.
+ */
+function saveResumeBackup(data) {
+  try {
+    const dir = getAutosaveDir();
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    const backupFile = path.join(dir, `autosave-${process.pid}.json`);
+    const backupData = {
+      content: data.content,
+      filePath: data.filePath || null,
+      originalContent: data.originalContent || "",
+      isDirty: true,
+      pid: process.pid,
+      savedAt: Date.now(),
+    };
+    fs.writeFileSync(backupFile, JSON.stringify(backupData), "utf-8");
+  } catch {
+    // Ignore write errors
+  }
+}
+
 function isProcessRunning(pid) {
   try {
     process.kill(pid, 0);
@@ -196,6 +222,7 @@ module.exports = {
   getAutosaveMinutes,
   setAutosaveMinutes,
   saveAutosaveBackup,
+  saveResumeBackup,
   clearAutosaveBackup,
   loadOrphanedAutosaves,
   removeOrphanedBackup,

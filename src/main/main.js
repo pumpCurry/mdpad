@@ -11,6 +11,7 @@ const {
   getAutosaveMinutes,
   setAutosaveMinutes,
   saveAutosaveBackup,
+  saveResumeBackup,
   clearAutosaveBackup,
   loadOrphanedAutosaves,
   removeOrphanedBackup,
@@ -55,6 +56,18 @@ function createWindow(openFilePath) {
   // Per-window forceQuit flag
   let windowForceQuit = false;
 
+  // Close dialog result handler (renderer → main)
+  // Each window gets its own resolver
+  let closeDialogResolve = null;
+
+  ipcMain.on("close:dialogResult", (event, result) => {
+    // Only handle events from this window's webContents
+    if (event.sender === win.webContents && closeDialogResolve) {
+      closeDialogResolve(result);
+      closeDialogResolve = null;
+    }
+  });
+
   // Close handler: intercept and ask renderer for dirty state
   win.on("close", async (e) => {
     saveWindowState(win);
@@ -78,106 +91,71 @@ function createWindow(openFilePath) {
         return;
       }
 
-      // Dirty — show save dialog
-      let result;
-      if (state.hasFilePath) {
-        // Existing file: overwrite / save as / exit
-        result = await dialog.showMessageBox(win, {
-          type: "warning",
-          buttons: [
-            t("dialog.closeExistingSave"),
-            t("dialog.closeExistingSaveAs"),
-            t("dialog.closeExistingExit"),
-          ],
-          defaultId: 0,
-          cancelId: -1,
-          message: t("dialog.closeMessage"),
-          detail: t("dialog.closeDetail"),
-          noLink: true,
-        });
+      // Dirty — send to renderer to show HTML close dialog
+      const resultPromise = new Promise((resolve) => {
+        closeDialogResolve = resolve;
+      });
 
-        if (result.response === 0) {
-          // Overwrite save
+      win.webContents.send("close:showDialog", {
+        isDirty: state.isDirty,
+        hasFilePath: state.hasFilePath,
+        filePath: state.filePath,
+      });
+
+      const result = await resultPromise;
+
+      if (result === "save") {
+        // Overwrite save (existing file)
+        const content = await win.webContents.executeJavaScript(
+          `window.__mdpadGetContent ? window.__mdpadGetContent() : ""`
+        );
+        fs.writeFileSync(state.filePath, content, "utf-8");
+        windowForceQuit = true;
+        clearSession();
+        clearAutosaveBackup();
+        win.close();
+      } else if (result === "saveAs") {
+        // Save As dialog
+        const saveResult = await dialog.showSaveDialog(win, {
+          filters: [
+            { name: t("dialog.filterMarkdown"), extensions: ["md"] },
+            { name: t("dialog.filterText"), extensions: ["txt"] },
+            { name: t("dialog.filterAll"), extensions: ["*"] },
+          ],
+        });
+        if (!saveResult.canceled) {
           const content = await win.webContents.executeJavaScript(
             `window.__mdpadGetContent ? window.__mdpadGetContent() : ""`
           );
-          fs.writeFileSync(state.filePath, content, "utf-8");
-          windowForceQuit = true;
-          clearSession();
-          clearAutosaveBackup();
-          win.close();
-        } else if (result.response === 1) {
-          // Save As
-          const saveResult = await dialog.showSaveDialog(win, {
-            filters: [
-              { name: t("dialog.filterMarkdown"), extensions: ["md"] },
-              { name: t("dialog.filterText"), extensions: ["txt"] },
-              { name: t("dialog.filterAll"), extensions: ["*"] },
-            ],
-          });
-          if (!saveResult.canceled) {
-            const content = await win.webContents.executeJavaScript(
-              `window.__mdpadGetContent ? window.__mdpadGetContent() : ""`
-            );
-            fs.writeFileSync(saveResult.filePath, content, "utf-8");
-            windowForceQuit = true;
-            clearSession();
-            clearAutosaveBackup();
-            win.close();
-          }
-          // If canceled, stay open
-        } else if (result.response === 2) {
-          // Exit without saving
+          fs.writeFileSync(saveResult.filePath, content, "utf-8");
           windowForceQuit = true;
           clearSession();
           clearAutosaveBackup();
           win.close();
         }
-        // If dialog dismissed (Esc), stay open
-      } else {
-        // New file: save / exit
-        result = await dialog.showMessageBox(win, {
-          type: "warning",
-          buttons: [
-            t("dialog.closeNewSave"),
-            t("dialog.closeNewExit"),
-          ],
-          defaultId: 0,
-          cancelId: -1,
-          message: t("dialog.closeMessage"),
-          detail: t("dialog.closeDetail"),
-          noLink: true,
+        // If canceled, stay open
+      } else if (result === "resumeSave") {
+        // Resume save: force backup then close
+        const content = await win.webContents.executeJavaScript(
+          `window.__mdpadGetContent ? window.__mdpadGetContent() : ""`
+        );
+        saveResumeBackup({
+          content,
+          filePath: state.filePath,
+          originalContent: "",
+          isDirty: true,
         });
-
-        if (result.response === 0) {
-          // Save (new file → Save As dialog)
-          const saveResult = await dialog.showSaveDialog(win, {
-            filters: [
-              { name: t("dialog.filterMarkdown"), extensions: ["md"] },
-              { name: t("dialog.filterText"), extensions: ["txt"] },
-              { name: t("dialog.filterAll"), extensions: ["*"] },
-            ],
-          });
-          if (!saveResult.canceled) {
-            const content = await win.webContents.executeJavaScript(
-              `window.__mdpadGetContent ? window.__mdpadGetContent() : ""`
-            );
-            fs.writeFileSync(saveResult.filePath, content, "utf-8");
-            windowForceQuit = true;
-            clearSession();
-            clearAutosaveBackup();
-            win.close();
-          }
-          // If canceled, stay open
-        } else if (result.response === 1) {
-          // Exit without saving
-          windowForceQuit = true;
-          clearSession();
-          clearAutosaveBackup();
-          win.close();
-        }
-        // If dialog dismissed (Esc), stay open
+        windowForceQuit = true;
+        clearSession();
+        win.close();
+      } else if (result === "exitNoSave") {
+        // Exit without saving
+        windowForceQuit = true;
+        clearSession();
+        clearAutosaveBackup();
+        win.close();
       }
+      // If result === "cancel" or anything else, stay open
     } catch (err) {
       // If communication fails, allow close
       windowForceQuit = true;
@@ -256,6 +234,9 @@ function createWindow(openFilePath) {
     });
     ipcMain.handle("autosave:clear", () => {
       clearAutosaveBackup();
+    });
+    ipcMain.handle("autosave:resumeSave", (_event, data) => {
+      saveResumeBackup(data);
     });
     ipcMain.handle("autosave:getOrphaned", () => {
       return loadOrphanedAutosaves();
@@ -383,7 +364,7 @@ function getFileArgFromCommandLine() {
   if (args.length <= 1) return null;
 
   const last = args[args.length - 1];
-  if (!last || last.startsWith("-") || last === ".") return null;
+  if (!last || last.startsWith("-") || last === "." || last === "/?") return null;
 
   // Ignore executable files (the app's own EXE or electron.exe)
   const ext = path.extname(last).toLowerCase();
@@ -391,6 +372,39 @@ function getFileArgFromCommandLine() {
 
   if (fs.existsSync(last)) return last;
   return null;
+}
+
+// --- CLI: --help / -h / /? / --version / -v ---
+{
+  const pkg = require("../../package.json");
+  const cliArgs = process.argv.slice(1); // skip the exe/electron itself
+
+  const hasHelp = cliArgs.some((a) => a === "--help" || a === "-h" || a === "/?");
+  const hasVersion = cliArgs.some((a) => a === "--version" || a === "-v");
+
+  if (hasHelp) {
+    console.log(`${pkg.name} v${pkg.version}`);
+    console.log(`${pkg.description}\n`);
+    console.log("Usage:");
+    console.log("  mdpad [options] [file]");
+    console.log("");
+    console.log("Options:");
+    console.log("  --help, -h, /?     Show this help and exit");
+    console.log("  --version, -v      Show version and exit");
+    console.log("");
+    console.log("Arguments:");
+    console.log("  file               Markdown file to open (.md, .txt, etc.)");
+    console.log("");
+    console.log("Examples:");
+    console.log("  mdpad README.md");
+    console.log("  mdpad --help");
+    process.exit(0);
+  }
+
+  if (hasVersion) {
+    console.log(`${pkg.name} v${pkg.version}`);
+    process.exit(0);
+  }
 }
 
 app.whenReady().then(() => {

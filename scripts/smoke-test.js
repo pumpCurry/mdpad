@@ -71,7 +71,7 @@ function resolveExePath() {
 // ---------------------------------------------------------------------------
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let stepNum = 0;
-const totalSteps = 11;
+const totalSteps = 14;
 const results = [];
 
 function stepStart(label) {
@@ -278,7 +278,7 @@ async function main() {
     const page = await waitForDebugger(REMOTE_DEBUGGING_PORT, TIMEOUT_LAUNCH);
     stepOK(`Window: ${page.title || page.url}`);
 
-    stepStart("Connecting to DevTools + verifying recovery modal...");
+    stepStart("Connecting to DevTools...");
     cdp = new CDPSession(page.webSocketDebuggerUrl);
     await cdp.connect();
     await cdp.send("Runtime.enable");
@@ -287,6 +287,7 @@ async function main() {
     // Wait for app init + recovery modal
     await sleep(4000);
 
+    stepStart("Verifying recovery modal appears...");
     // Check if recovery modal is visible (retry a few times)
     let hasModal = false;
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -316,7 +317,7 @@ async function main() {
         // Find and click the restore button (green button)
         var buttons = overlay.querySelectorAll("button");
         for (var b of buttons) {
-          if (b.textContent.includes("復元") || b.textContent.includes("Restore")) {
+          if (b.textContent.includes("選択を復元") || b.textContent.includes("Restore Selected")) {
             b.click();
             return "CLICKED";
           }
@@ -573,17 +574,9 @@ async function main() {
     await sleep(200);
 
     // =====================================================================
-    // Phase 5: Close dialogs
+    // Phase 5: Close dialog (HTML modal)
     // =====================================================================
-    stepStart("Testing window close → cancel...");
-
-    // Try to close window via CDP — this triggers the close handler
-    // Use Browser.close but we need to intercept the dialog
-    // Instead, we simulate the "close" action and check the dialog
-
-    // Trigger close via JavaScript (the app uses beforeunload or close handler)
-    // Actually, electron's close handler shows a native dialog. We can't interact with native dialogs via CDP.
-    // Instead, verify via __mdpadGetCloseState that a dialog WOULD appear
+    stepStart("Verifying isDirty state...");
     const closeState = await cdp.evaluate(`
       JSON.stringify(
         window.__mdpadGetCloseState
@@ -594,7 +587,58 @@ async function main() {
     const state = JSON.parse(closeState);
     if (state.error) throw new Error(state.error);
     if (!state.isDirty) throw new Error("isDirty should be true");
-    stepOK("Close state: isDirty=true → save dialog would appear on close");
+    stepOK("isDirty=true confirmed");
+
+    stepStart("Opening HTML close dialog...");
+    // Trigger close dialog via exposed test helper
+    await cdp.evaluate(`
+      (function() {
+        if (window.__mdpadShowCloseDialog) {
+          window.__mdpadShowCloseDialog();
+        }
+      })()
+    `);
+    await sleep(500);
+
+    // Verify dialog appeared
+    let hasCloseDialog = await cdp.evaluate(`!!document.getElementById("close-dialog-overlay")`);
+    if (!hasCloseDialog) {
+      throw new Error("Close dialog did not appear");
+    }
+
+    // Verify buttons exist
+    const closeDialogBtns = await cdp.evaluate(`
+      (function() {
+        var overlay = document.getElementById("close-dialog-overlay");
+        if (!overlay) return "NO_OVERLAY";
+        var btns = overlay.querySelectorAll("button");
+        var labels = [];
+        for (var b of btns) {
+          if (b.textContent !== "×") labels.push(b.textContent);
+        }
+        return labels.join(" | ");
+      })()
+    `);
+    stepOK("Close dialog opened, buttons: " + closeDialogBtns);
+
+    stepStart("Cancelling close dialog and force-closing...");
+    // Click × to cancel
+    await cdp.evaluate(`
+      (function() {
+        var overlay = document.getElementById("close-dialog-overlay");
+        if (!overlay) return;
+        var btns = overlay.querySelectorAll("button");
+        for (var b of btns) {
+          if (b.textContent === "×") { b.click(); return; }
+        }
+      })()
+    `);
+    await sleep(300);
+
+    // Verify dialog closed
+    hasCloseDialog = await cdp.evaluate(`!!document.getElementById("close-dialog-overlay")`);
+    if (hasCloseDialog) throw new Error("Close dialog should have been dismissed");
+    stepOK("Close dialog cancelled successfully");
 
     stepStart("Force-closing process...");
     cdp.close();

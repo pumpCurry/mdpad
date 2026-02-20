@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 contextBridge.exposeInMainWorld("mdpad", {
   // File operations
@@ -40,8 +40,22 @@ contextBridge.exposeInMainWorld("mdpad", {
   getOrphanedAutosaves: () => ipcRenderer.invoke("autosave:getOrphaned"),
   removeOrphanedBackup: (path) => ipcRenderer.invoke("autosave:removeOrphaned", path),
 
+  // DnD: get file path from File object (Electron 33+ requires webUtils)
+  getFilePath: (file) => webUtils.getPathForFile(file),
+
   // Shell: open URL in external browser
   openExternal: (url) => ipcRenderer.invoke("shell:openExternal", url),
+
+  // Close dialog (main -> renderer -> main)
+  onShowCloseDialog: (callback) => {
+    const listener = (_event, closeState) => callback(closeState);
+    ipcRenderer.on("close:showDialog", listener);
+    return () => ipcRenderer.removeListener("close:showDialog", listener);
+  },
+  sendCloseDialogResult: (result) => ipcRenderer.send("close:dialogResult", result),
+
+  // Resume save (force backup even if autosave is OFF)
+  saveResumeBackup: (data) => ipcRenderer.invoke("autosave:resumeSave", data),
 
   // Menu actions (main -> renderer)
   onMenuAction: (callback) => {

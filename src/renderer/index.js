@@ -129,6 +129,20 @@ async function init() {
   // Expose editor view for smoke tests
   window.__mdpadEditor = () => getEditor();
 
+  // Close dialog listener (main → renderer)
+  window.mdpad.onShowCloseDialog((closeState) => {
+    showCloseDialog(closeState);
+  });
+
+  // Expose showCloseDialog for smoke tests
+  window.__mdpadShowCloseDialog = (closeState) => {
+    showCloseDialog(closeState || {
+      isDirty: true,
+      hasFilePath: !!currentFilePath,
+      filePath: currentFilePath,
+    });
+  };
+
   // Session auto-save for crash recovery (lightweight, always on)
   setInterval(() => {
     if (isDirty) {
@@ -495,7 +509,7 @@ function initDragAndDrop() {
     if (!files || files.length === 0) return;
 
     const file = files[0];
-    const filePath = file.path;
+    const filePath = window.mdpad.getFilePath(file);
     if (!filePath) return;
 
     // DnD behavior:
@@ -698,11 +712,24 @@ function showRecoveryModal(recoveries, autosaves) {
     "padding:20px;width:480px;max-height:70vh;display:flex;flex-direction:column;" +
     "box-shadow:0 8px 24px rgba(0,0,0,0.2);";
 
-  // Title
+  // Title row with × button
+  const titleRow = document.createElement("div");
+  titleRow.style.cssText = "display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;";
+
   const titleEl = document.createElement("div");
   titleEl.textContent = t("recovery.title");
-  titleEl.style.cssText = "font-size:16px;font-weight:700;margin-bottom:8px;color:#24292f;";
-  modal.appendChild(titleEl);
+  titleEl.style.cssText = "font-size:16px;font-weight:700;color:#24292f;";
+  titleRow.appendChild(titleEl);
+
+  const closeXBtn = document.createElement("button");
+  closeXBtn.textContent = "×";
+  closeXBtn.style.cssText =
+    "border:none;background:transparent;font-size:20px;color:#57606a;" +
+    "cursor:pointer;padding:0 4px;line-height:1;";
+  closeXBtn.onclick = () => { overlay.remove(); focus(); };
+  titleRow.appendChild(closeXBtn);
+
+  modal.appendChild(titleRow);
 
   if (recoveries.length === 0) {
     // No backups message
@@ -807,37 +834,68 @@ function showRecoveryModal(recoveries, autosaves) {
   renderList();
   modal.appendChild(listEl);
 
-  // Buttons row
+  // Buttons row: [Delete Selected] ...space... [Later] [Restore Selected]
   const btnRow = document.createElement("div");
-  btnRow.style.cssText = "display:flex;gap:8px;justify-content:flex-end;";
+  btnRow.style.cssText = "display:flex;gap:8px;align-items:center;";
 
-  const ignoreBtn = document.createElement("button");
-  ignoreBtn.textContent = t("recovery.ignoreAll");
-  ignoreBtn.style.cssText =
-    "padding:6px 16px;border:1px solid #d0d7de;border-radius:6px;" +
-    "background:#f6f8fa;cursor:pointer;font-size:13px;color:#57606a;";
-  ignoreBtn.onclick = async () => {
-    await cleanupOrphans(autosaves);
-    overlay.remove();
-    focus();
+  const deleteBtn = document.createElement("button");
+  deleteBtn.textContent = t("recovery.deleteSelected");
+  deleteBtn.style.cssText =
+    "padding:6px 16px;border:1px solid #cf222e;border-radius:6px;" +
+    "background:#fff;color:#cf222e;cursor:pointer;font-size:13px;" +
+    "margin-right:auto;";
+  deleteBtn.onclick = async () => {
+    const selected = recoveries[selectedIdx];
+    if (!selected) return;
+
+    // Remove the backup file
+    if (selected._backupFile) {
+      try { await window.mdpad.removeOrphanedBackup(selected._backupFile); } catch {}
+    }
+    if (selected._sessionFile) {
+      // Session files also need cleanup — use the same IPC
+      try { await window.mdpad.removeOrphanedBackup(selected._sessionFile); } catch {}
+    }
+
+    // Remove from autosaves array too
+    if (autosaves) {
+      const aIdx = autosaves.indexOf(selected);
+      if (aIdx !== -1) autosaves.splice(aIdx, 1);
+    }
+
+    // Remove from recoveries list
+    recoveries.splice(selectedIdx, 1);
+
+    // If no more items, close modal
+    if (recoveries.length === 0) {
+      overlay.remove();
+      focus();
+      return;
+    }
+
+    // Adjust selection
+    if (selectedIdx >= recoveries.length) {
+      selectedIdx = recoveries.length - 1;
+    }
+    renderList();
   };
 
-  const closeBtn = document.createElement("button");
-  closeBtn.textContent = t("recovery.close");
-  closeBtn.style.cssText =
+  const laterBtn = document.createElement("button");
+  laterBtn.textContent = t("recovery.later");
+  laterBtn.style.cssText =
     "padding:6px 16px;border:1px solid #d0d7de;border-radius:6px;" +
     "background:#f6f8fa;cursor:pointer;font-size:13px;";
-  closeBtn.onclick = () => { overlay.remove(); focus(); };
+  laterBtn.onclick = () => { overlay.remove(); focus(); };
 
   const restoreBtn = document.createElement("button");
-  restoreBtn.textContent = t("recovery.restore");
+  restoreBtn.textContent = t("recovery.restoreSelected");
   restoreBtn.style.cssText =
     "padding:6px 16px;border:none;border-radius:6px;" +
     "background:#2da44e;color:#fff;cursor:pointer;font-size:13px;font-weight:600;";
   restoreBtn.onclick = () => doRestore();
 
-  btnRow.appendChild(ignoreBtn);
-  btnRow.appendChild(closeBtn);
+  btnRow.appendChild(deleteBtn);
+  btnRow.appendChild(laterBtn);
   btnRow.appendChild(restoreBtn);
   modal.appendChild(btnRow);
 
@@ -878,8 +936,13 @@ function showRecoveryModal(recoveries, autosaves) {
     // Perform restore
     await performRestore(selected);
 
-    // Cleanup orphans
-    await cleanupOrphans(autosaves);
+    // Cleanup only the restored backup (not all orphans)
+    if (selected._backupFile) {
+      try { await window.mdpad.removeOrphanedBackup(selected._backupFile); } catch {}
+    }
+    if (selected._sessionFile) {
+      try { await window.mdpad.removeOrphanedBackup(selected._sessionFile); } catch {}
+    }
 
     overlay.remove();
     focus();
@@ -981,6 +1044,141 @@ async function cleanupOrphans(autosaves) {
         try { await window.mdpad.removeOrphanedBackup(backup._backupFile); } catch {}
       }
     }
+  }
+}
+
+// --- Close dialog (HTML modal, replaces native dialog) ---
+
+function showCloseDialog(closeState) {
+  // Prevent duplicate
+  if (document.getElementById("close-dialog-overlay")) return;
+
+  const overlay = document.createElement("div");
+  overlay.id = "close-dialog-overlay";
+  overlay.style.cssText =
+    "position:fixed;top:0;left:0;right:0;bottom:0;" +
+    "background:rgba(0,0,0,0.4);z-index:10000;" +
+    "display:flex;align-items:flex-start;justify-content:center;padding-top:15vh;";
+
+  const modal = document.createElement("div");
+  modal.style.cssText =
+    "background:#ffffff;border:1px solid #d0d7de;border-radius:8px;" +
+    "padding:20px;width:520px;box-shadow:0 8px 24px rgba(0,0,0,0.2);";
+
+  // Title row with × button
+  const titleRow = document.createElement("div");
+  titleRow.style.cssText = "display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;";
+
+  const titleEl = document.createElement("div");
+  titleEl.textContent = t("dialog.closeTitle");
+  titleEl.style.cssText = "font-size:16px;font-weight:700;color:#24292f;";
+  titleRow.appendChild(titleEl);
+
+  const closeXBtn = document.createElement("button");
+  closeXBtn.textContent = "×";
+  closeXBtn.style.cssText =
+    "border:none;background:transparent;font-size:20px;color:#57606a;" +
+    "cursor:pointer;padding:0 4px;line-height:1;";
+  closeXBtn.onclick = () => doResult("cancel");
+  titleRow.appendChild(closeXBtn);
+  modal.appendChild(titleRow);
+
+  // Message
+  const msgEl = document.createElement("div");
+  msgEl.textContent = t("dialog.closeDetail");
+  msgEl.style.cssText = "font-size:14px;color:#57606a;margin-bottom:16px;line-height:1.5;";
+  modal.appendChild(msgEl);
+
+  // Buttons row
+  const btnRow = document.createElement("div");
+  btnRow.style.cssText = "display:flex;gap:8px;align-items:center;";
+
+  // [保存せず終了] — destructive, left-aligned, red, separated
+  const exitNoSaveBtn = document.createElement("button");
+  exitNoSaveBtn.textContent = t("dialog.closeExitNoSave");
+  exitNoSaveBtn.style.cssText =
+    "padding:6px 16px;border:1px solid #cf222e;border-radius:6px;" +
+    "background:#fff;color:#cf222e;cursor:pointer;font-size:13px;" +
+    "margin-right:auto;";
+  exitNoSaveBtn.onclick = () => doResult("exitNoSave");
+
+  // [リジューム保存] — secondary
+  const resumeBtn = document.createElement("button");
+  resumeBtn.textContent = t("dialog.closeResumeSave");
+  resumeBtn.style.cssText =
+    "padding:6px 16px;border:1px solid #d0d7de;border-radius:6px;" +
+    "background:#f6f8fa;cursor:pointer;font-size:13px;";
+  resumeBtn.onclick = () => doResult("resumeSave");
+
+  if (closeState.hasFilePath) {
+    // Existing file: [保存せず終了]  [リジューム保存] [名前を付けて保存] [上書き保存して終了]
+    const saveAsBtn = document.createElement("button");
+    saveAsBtn.textContent = t("dialog.closeSaveAs");
+    saveAsBtn.style.cssText =
+      "padding:6px 16px;border:1px solid #d0d7de;border-radius:6px;" +
+      "background:#f6f8fa;cursor:pointer;font-size:13px;";
+    saveAsBtn.onclick = () => doResult("saveAs");
+
+    const saveBtn = document.createElement("button");
+    saveBtn.textContent = t("dialog.closeSaveAndExit");
+    saveBtn.style.cssText =
+      "padding:6px 16px;border:none;border-radius:6px;" +
+      "background:#2da44e;color:#fff;cursor:pointer;font-size:13px;font-weight:600;";
+    saveBtn.onclick = () => doResult("save");
+
+    // tabindex: primary first, then secondaries, destructive last
+    saveBtn.tabIndex = 1;
+    saveAsBtn.tabIndex = 2;
+    resumeBtn.tabIndex = 3;
+    exitNoSaveBtn.tabIndex = 4;
+
+    btnRow.appendChild(exitNoSaveBtn);
+    btnRow.appendChild(resumeBtn);
+    btnRow.appendChild(saveAsBtn);
+    btnRow.appendChild(saveBtn);
+  } else {
+    // New file: [保存せず終了]  [リジューム保存] [名前を付けて保存]
+    const saveAsBtn = document.createElement("button");
+    saveAsBtn.textContent = t("dialog.closeSaveAs");
+    saveAsBtn.style.cssText =
+      "padding:6px 16px;border:none;border-radius:6px;" +
+      "background:#2da44e;color:#fff;cursor:pointer;font-size:13px;font-weight:600;";
+    saveAsBtn.onclick = () => doResult("saveAs");
+
+    // tabindex: primary first, then secondaries, destructive last
+    saveAsBtn.tabIndex = 1;
+    resumeBtn.tabIndex = 2;
+    exitNoSaveBtn.tabIndex = 3;
+
+    btnRow.appendChild(exitNoSaveBtn);
+    btnRow.appendChild(resumeBtn);
+    btnRow.appendChild(saveAsBtn);
+  }
+
+  modal.appendChild(btnRow);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+
+  // Keyboard support
+  overlay.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      doResult("cancel");
+    }
+  });
+
+  // Click overlay background → cancel
+  overlay.addEventListener("mousedown", (e) => {
+    if (e.target === overlay) doResult("cancel");
+  });
+
+  // Focus the primary button
+  const firstBtn = modal.querySelector("[tabindex='1']");
+  if (firstBtn) firstBtn.focus();
+
+  function doResult(result) {
+    overlay.remove();
+    window.mdpad.sendCloseDialogResult(result);
   }
 }
 
