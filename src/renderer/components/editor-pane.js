@@ -491,12 +491,13 @@ export function createEditor(container, onChange) {
     overwriteInputHandler(),
     searchMatchCountPlugin(),
     // Disable CodeMirror's built-in drop handler — all DnD is managed by index.js
+    // IMPORTANT: Do NOT call stopPropagation() here — the document-level
+    // drop handler in index.js must still receive the event for DnD routing.
     EditorView.domEventHandlers({
       drop(event) {
-        // Prevent CodeMirror from inserting dropped file content
-        event.preventDefault();
-        event.stopPropagation();
-        return true; // Signal to CM that we handled it
+        // Return true tells CodeMirror "I handled it, don't insert text".
+        // The event continues to bubble up to the document listener in index.js.
+        return true;
       },
     }),
     EditorView.updateListener.of((update) => {
