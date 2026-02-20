@@ -169,13 +169,24 @@ function createWindow(openFilePath) {
     }
   });
 
-  // Prevent in-app navigation — always open in external browser
+  // Prevent ALL in-app navigation — the app's HTML must never be replaced.
+  // Any link click, anchor, or redirect must be blocked.
+  // http(s) links → open in external browser; everything else → silently block.
+  let initialLoadDone = false;
+  win.webContents.once("did-finish-load", () => {
+    initialLoadDone = true;
+  });
+
   win.webContents.on("will-navigate", (e, url) => {
-    // Allow file:// (initial load) but block any http(s) navigation
+    if (!initialLoadDone) return; // Allow the initial file:// load
+
+    e.preventDefault();
+
+    // Open http(s) URLs in external browser
     if (/^https?:\/\//i.test(url)) {
-      e.preventDefault();
       shell.openExternal(url);
     }
+    // All other navigations (file://, about:, anchors, etc.) are silently blocked
   });
 
   // Prevent new windows from opening inside the app
@@ -184,6 +195,17 @@ function createWindow(openFilePath) {
       shell.openExternal(url);
     }
     return { action: "deny" };
+  });
+
+  // Block mouse back/forward buttons — prevent history navigation
+  win.webContents.on("before-input-event", (_e, input) => {
+    // Mouse back/forward (BrowserBack/BrowserForward) or Alt+Left/Right
+    if (input.key === "BrowserBack" || input.key === "BrowserForward") {
+      _e.preventDefault();
+    }
+    if ((input.alt || input.meta) && (input.key === "Left" || input.key === "Right")) {
+      _e.preventDefault();
+    }
   });
 
   createMenu(win);

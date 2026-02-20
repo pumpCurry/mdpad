@@ -163,7 +163,8 @@ async function init() {
   // Set up drag-and-drop
   initDragAndDrop();
 
-  // Intercept all link clicks in preview/diff panes → open in external browser
+  // Intercept ALL link clicks — the app's HTML must never be replaced.
+  // http/https → open in external browser; everything else → block silently.
   document.addEventListener("click", (e) => {
     const link = e.target.closest("a[href]");
     if (!link) return;
@@ -171,12 +172,15 @@ async function init() {
     const href = link.getAttribute("href");
     if (!href) return;
 
-    // Only intercept http/https links
+    // Always prevent default navigation for any link
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Open http/https links in external browser
     if (/^https?:\/\//i.test(href)) {
-      e.preventDefault();
-      e.stopPropagation();
       window.mdpad.openExternal(href);
     }
+    // All other links (file://, #anchors, relative paths, etc.) are silently blocked
   });
 
   // Focus editor
