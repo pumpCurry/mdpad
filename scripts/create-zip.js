@@ -11,7 +11,7 @@ const fs = require("fs");
 const pkg = require("../package.json");
 
 // Auto-detect build output directory (newest first)
-const buildCandidates = ["build5", "build4", "build3", "build2", "build"].map(
+const buildCandidates = ["build6", "build5", "build4", "build3", "build2", "build"].map(
   (d) => path.join(__dirname, "..", d, "win-unpacked")
 );
 const buildDir = buildCandidates.find((d) => fs.existsSync(d)) || buildCandidates[buildCandidates.length - 1];
