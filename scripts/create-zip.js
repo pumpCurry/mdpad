@@ -10,12 +10,11 @@ const path = require("path");
 const fs = require("fs");
 const pkg = require("../package.json");
 
-// Auto-detect build output directory (build4/ or build3/ or build2/ or build/)
-const buildDir4 = path.join(__dirname, "..", "build4", "win-unpacked");
-const buildDir3 = path.join(__dirname, "..", "build3", "win-unpacked");
-const buildDir2 = path.join(__dirname, "..", "build2", "win-unpacked");
-const buildDir1 = path.join(__dirname, "..", "build", "win-unpacked");
-const buildDir = fs.existsSync(buildDir4) ? buildDir4 : fs.existsSync(buildDir3) ? buildDir3 : fs.existsSync(buildDir2) ? buildDir2 : buildDir1;
+// Auto-detect build output directory (newest first)
+const buildCandidates = ["build5", "build4", "build3", "build2", "build"].map(
+  (d) => path.join(__dirname, "..", d, "win-unpacked")
+);
+const buildDir = buildCandidates.find((d) => fs.existsSync(d)) || buildCandidates[buildCandidates.length - 1];
 const outputDir = path.dirname(buildDir);
 const zipName = `mdpad-v${pkg.version}-win-x64-portable.zip`;
 const zipPath = path.join(outputDir, zipName);

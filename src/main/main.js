@@ -367,20 +367,29 @@ function spawnNewInstance(filePath) {
   }).unref();
 }
 
-// Handle command-line file argument (from spawned instance)
+// Handle command-line file argument (from spawned instance or OS file association)
 function getFileArgFromCommandLine() {
   const args = process.argv;
-  // Look for file path after "--" or as last argument
+
+  // Look for file path after "--" separator (used by spawnNewInstance)
   const dashIdx = args.indexOf("--");
   if (dashIdx !== -1 && args.length > dashIdx + 1) {
     const filePath = args[dashIdx + 1];
     if (fs.existsSync(filePath)) return filePath;
   }
-  // Also check last argument (for OS-level file association)
+
+  // Also check last argument (for OS-level file association, e.g. double-click .md)
+  // Skip if there's only 1 arg (the exe itself) or 2 args in dev mode (electron + .)
+  if (args.length <= 1) return null;
+
   const last = args[args.length - 1];
-  if (last && !last.startsWith("-") && last !== "." && fs.existsSync(last)) {
-    return last;
-  }
+  if (!last || last.startsWith("-") || last === ".") return null;
+
+  // Ignore executable files (the app's own EXE or electron.exe)
+  const ext = path.extname(last).toLowerCase();
+  if (ext === ".exe" || ext === ".lnk") return null;
+
+  if (fs.existsSync(last)) return last;
   return null;
 }
 
