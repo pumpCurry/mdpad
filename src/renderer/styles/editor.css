@@ -21,7 +21,7 @@
 }
 
 #editor-pane .cm-editor .cm-activeLine {
-  background: #f6f8fa;
+  background: rgba(246, 248, 250, 0.65);
 }
 
 #editor-pane .cm-editor .cm-selectionBackground {
@@ -32,8 +32,19 @@
   background: #add6ff !important;
 }
 
-#editor-pane .cm-editor .cm-cursor {
+#editor-pane .cm-editor .cm-cursor,
+#editor-pane .cm-editor .cm-cursor-primary {
   border-left-color: #24292f;
+  z-index: 10 !important;
+}
+
+/* Overwrite mode: block caret */
+#editor-pane .cm-editor.cm-overwrite-mode .cm-cursor,
+#editor-pane .cm-editor.cm-overwrite-mode .cm-cursor-primary {
+  border-left: none;
+  background: rgba(36, 41, 47, 0.5);
+  width: 1ch;
+  z-index: 10 !important;
 }
 
 /* Ruler */
@@ -74,4 +85,30 @@
 .cm-search-match-info.replaced {
   color: #1a7f37;
   font-weight: 600;
+}
+
+/* Horizontal ruler bar */
+.cm-horizontal-ruler {
+  height: 18px;
+  background: #f6f8fa;
+  border-bottom: 1px solid #d0d7de;
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.cm-horizontal-ruler-canvas {
+  display: block;
+  position: relative;
+}
+
+.cm-horizontal-ruler-cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #0969da;
+  pointer-events: none;
+  transition: left 0.05s ease-out;
 }

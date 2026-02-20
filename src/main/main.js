@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, shell } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const { registerIpcHandlers } = require("./ipc-handlers");
@@ -191,6 +191,23 @@ function createWindow(openFilePath) {
     }
   });
 
+  // Prevent in-app navigation — always open in external browser
+  win.webContents.on("will-navigate", (e, url) => {
+    // Allow file:// (initial load) but block any http(s) navigation
+    if (/^https?:\/\//i.test(url)) {
+      e.preventDefault();
+      shell.openExternal(url);
+    }
+  });
+
+  // Prevent new windows from opening inside the app
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) {
+      shell.openExternal(url);
+    }
+    return { action: "deny" };
+  });
+
   createMenu(win);
   registerIpcHandlers(win);
 
@@ -250,6 +267,14 @@ function createWindow(openFilePath) {
     // IPC: open file in new window (for drag-and-drop)
     ipcMain.handle("drop:openInNewWindow", (_event, filePath) => {
       createWindow(filePath);
+    });
+
+    // IPC: open URL in external browser
+    ipcMain.handle("shell:openExternal", (_event, url) => {
+      // Only allow http/https URLs for safety
+      if (typeof url === "string" && /^https?:\/\//i.test(url)) {
+        shell.openExternal(url);
+      }
     });
 
     ipcRegistered = true;

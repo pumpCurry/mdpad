@@ -37,6 +37,9 @@ contextBridge.exposeInMainWorld("mdpad", {
   getOrphanedAutosaves: () => ipcRenderer.invoke("autosave:getOrphaned"),
   removeOrphanedBackup: (path) => ipcRenderer.invoke("autosave:removeOrphaned", path),
 
+  // Shell: open URL in external browser
+  openExternal: (url) => ipcRenderer.invoke("shell:openExternal", url),
+
   // Menu actions (main -> renderer)
   onMenuAction: (callback) => {
     const listener = (_event, action) => callback(action);

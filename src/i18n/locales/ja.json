@@ -20,6 +20,7 @@
     "edit_redo": "やり直し",
     "edit_find": "検索...",
     "edit_replace": "置換...",
+    "edit_goToLine": "行にジャンプ...",
     "view": "表示",
     "view_toggleEditor": "エディタペインの切替",
     "view_togglePreview": "プレビューペインの切替",
@@ -120,5 +121,10 @@
     "selectFile": "比較するファイルを選択してください",
     "mermaidError": "Mermaidエラー:",
     "noChanges": "変更なし"
+  },
+  "goToLine": {
+    "title": "行にジャンプ",
+    "placeholder": "行番号を入力",
+    "outOfRange": "行番号が範囲外です"
   }
 }

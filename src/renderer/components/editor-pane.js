@@ -35,6 +35,7 @@ import { searchKeymap } from "@codemirror/search";
 import { lintKeymap } from "@codemirror/lint";
 import { highlightSelectionMatches } from "@codemirror/search";
 import { t } from "../../i18n/i18n-renderer.js";
+import { rectSelectExtension } from "./rect-select.js";
 
 const wrapCompartment = new Compartment();
 const closeBracketsCompartment = new Compartment();
@@ -42,6 +43,49 @@ let editorView = null;
 let onChangeCallback = null;
 let wordWrapEnabled = true;
 let closeBracketsEnabled = true;
+let overwriteMode = false;
+
+// Overwrite mode plugin: toggles Insert key behavior (block caret + overwrite typing)
+function overwriteModePlugin() {
+  return ViewPlugin.fromClass(
+    class {
+      constructor(view) {
+        this.view = view;
+        this.keyHandler = (e) => {
+          if (e.key === "Insert" && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+            e.preventDefault();
+            overwriteMode = !overwriteMode;
+            view.dom.classList.toggle("cm-overwrite-mode", overwriteMode);
+          }
+        };
+        view.dom.addEventListener("keydown", this.keyHandler);
+      }
+      destroy() {
+        this.view.dom.removeEventListener("keydown", this.keyHandler);
+        this.view.dom.classList.remove("cm-overwrite-mode");
+      }
+    }
+  );
+}
+
+// Overwrite mode input handler: replaces characters instead of inserting
+function overwriteInputHandler() {
+  return EditorView.inputHandler.of((view, from, to, text) => {
+    if (!overwriteMode) return false;
+    if (text === "\n" || text === "\r\n") return false; // Don't overwrite on Enter
+    if (from !== to) return false; // Already replacing a selection
+
+    const line = view.state.doc.lineAt(from);
+    const charsToReplace = Math.min(text.length, line.to - from);
+    if (charsToReplace <= 0) return false;
+
+    view.dispatch({
+      changes: { from, to: from + charsToReplace, insert: text },
+      selection: { anchor: from + text.length },
+    });
+    return true;
+  });
+}
 
 // Ruler plugin: draws a vertical line at a given column using a ViewPlugin
 function rulerPlugin(col) {
@@ -73,6 +117,127 @@ function rulerPlugin(col) {
         }
       }
       destroy() {
+        this.ruler.remove();
+      }
+    }
+  );
+}
+
+// Horizontal ruler bar (Word-style): renders above .cm-scroller with tick marks and cursor marker
+function horizontalRulerPlugin() {
+  return ViewPlugin.fromClass(
+    class {
+      constructor(view) {
+        this.view = view;
+
+        // Create ruler container
+        this.ruler = document.createElement("div");
+        this.ruler.className = "cm-horizontal-ruler";
+
+        // Canvas for tick marks
+        this.canvas = document.createElement("canvas");
+        this.canvas.className = "cm-horizontal-ruler-canvas";
+        this.ruler.appendChild(this.canvas);
+
+        // Cursor position indicator
+        this.cursorMarker = document.createElement("div");
+        this.cursorMarker.className = "cm-horizontal-ruler-cursor";
+        this.ruler.appendChild(this.cursorMarker);
+
+        // Insert ruler before the scroller (inside .cm-editor, above .cm-scroller)
+        const scroller = view.scrollDOM;
+        scroller.parentNode.insertBefore(this.ruler, scroller);
+
+        // Sync horizontal scroll with editor
+        this.scrollHandler = () => this.syncScroll(view);
+        view.scrollDOM.addEventListener("scroll", this.scrollHandler);
+
+        this.draw(view);
+      }
+
+      draw(view) {
+        const charWidth = view.defaultCharacterWidth;
+        const maxCols = 200;
+        const rulerWidth = charWidth * maxCols;
+        const height = 18;
+        const dpr = window.devicePixelRatio || 1;
+
+        this.canvas.width = rulerWidth * dpr;
+        this.canvas.height = height * dpr;
+        this.canvas.style.width = rulerWidth + "px";
+        this.canvas.style.height = height + "px";
+
+        const ctx = this.canvas.getContext("2d");
+        ctx.scale(dpr, dpr);
+        ctx.clearRect(0, 0, rulerWidth, height);
+
+        // Draw tick marks
+        ctx.strokeStyle = "#d0d7de";
+        ctx.fillStyle = "#8c959f";
+        ctx.font = "10px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+        ctx.textAlign = "center";
+
+        for (let col = 0; col <= maxCols; col++) {
+          const x = col * charWidth;
+          if (col % 10 === 0 && col > 0) {
+            // Large tick + number label
+            ctx.beginPath();
+            ctx.moveTo(x, height);
+            ctx.lineTo(x, height - 10);
+            ctx.stroke();
+            ctx.fillText(String(col), x, height - 11);
+          } else if (col % 5 === 0) {
+            // Medium tick
+            ctx.beginPath();
+            ctx.moveTo(x, height);
+            ctx.lineTo(x, height - 6);
+            ctx.stroke();
+          } else {
+            // Small tick
+            ctx.beginPath();
+            ctx.moveTo(x, height);
+            ctx.lineTo(x, height - 3);
+            ctx.stroke();
+          }
+        }
+
+        this.syncScroll(view);
+        this.updateCursor(view);
+      }
+
+      syncScroll(view) {
+        const gutterWidth = this.getGutterWidth(view);
+        const scrollLeft = view.scrollDOM.scrollLeft;
+        const offset = gutterWidth - scrollLeft;
+        this.canvas.style.marginLeft = offset + "px";
+        this.cursorMarker.style.marginLeft = offset + "px";
+      }
+
+      getGutterWidth(view) {
+        const gutters = view.dom.querySelector(".cm-gutters");
+        return gutters ? gutters.offsetWidth : 0;
+      }
+
+      updateCursor(view) {
+        const charWidth = view.defaultCharacterWidth;
+        const pos = view.state.selection.main.head;
+        const line = view.state.doc.lineAt(pos);
+        const col = pos - line.from;
+        this.cursorMarker.style.left = (col * charWidth) + "px";
+        this.cursorMarker.style.display = "block";
+      }
+
+      update(update) {
+        if (update.geometryChanged || update.viewportChanged) {
+          this.draw(update.view);
+        } else if (update.selectionSet) {
+          this.updateCursor(update.view);
+          this.syncScroll(update.view);
+        }
+      }
+
+      destroy() {
+        this.view.scrollDOM.removeEventListener("scroll", this.scrollHandler);
         this.ruler.remove();
       }
     }
@@ -302,6 +467,7 @@ export function createEditor(container, onChange) {
     closeBracketsCompartment.of([closeBrackets(), keymap.of(closeBracketsKeymap)]),
     autocompletion(),
     rectangularSelection(),
+    ...rectSelectExtension(),
     crosshairCursor(),
     highlightActiveLine(),
     highlightSelectionMatches(),
@@ -320,6 +486,9 @@ export function createEditor(container, onChange) {
     keymap.of([indentWithTab]),
     wrapCompartment.of(EditorView.lineWrapping),
     rulerPlugin(80),
+    horizontalRulerPlugin(),
+    overwriteModePlugin(),
+    overwriteInputHandler(),
     searchMatchCountPlugin(),
     EditorView.updateListener.of((update) => {
       if (update.docChanged && onChangeCallback) {
@@ -404,8 +573,25 @@ export function getCursorInfo() {
   };
 }
 
+export function goToLine(lineNumber) {
+  if (!editorView) return false;
+  const doc = editorView.state.doc;
+  if (lineNumber < 1 || lineNumber > doc.lines) return false;
+  const line = doc.line(lineNumber);
+  editorView.dispatch({
+    selection: { anchor: line.from },
+    scrollIntoView: true,
+  });
+  editorView.focus();
+  return true;
+}
+
 export function focus() {
   if (editorView) editorView.focus();
+}
+
+export function isOverwriteMode() {
+  return overwriteMode;
 }
 
 export function refreshLayout() {
