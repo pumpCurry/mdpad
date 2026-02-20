@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer, webUtils } = require("electron");
+const { contextBridge, ipcRenderer, webUtils, webFrame } = require("electron");
 
 contextBridge.exposeInMainWorld("mdpad", {
   // File operations
@@ -14,7 +14,9 @@ contextBridge.exposeInMainWorld("mdpad", {
 
   // Window
   setTitle: (title) => ipcRenderer.invoke("window:setTitle", title),
-  confirmSave: () => ipcRenderer.invoke("dialog:confirmSave"),
+
+  // Zoom level (webFrame)
+  getZoomLevel: () => webFrame.getZoomLevel(),
 
   // i18n
   getLocale: () => ipcRenderer.invoke("i18n:getLocale"),

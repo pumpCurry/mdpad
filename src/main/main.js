@@ -216,10 +216,10 @@ function createWindow(openFilePath) {
   });
 
   createMenu(win);
-  registerIpcHandlers(win);
 
-  // Initialize session manager for crash recovery (once)
+  // Initialize IPC handlers, session manager, etc. (once globally)
   if (!ipcRegistered) {
+    registerIpcHandlers();
     initSessionManager();
     initAutosaveManager();
 

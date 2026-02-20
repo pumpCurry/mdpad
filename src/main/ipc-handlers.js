@@ -1,12 +1,23 @@
-const { ipcMain, dialog } = require("electron");
+const { ipcMain, dialog, BrowserWindow } = require("electron");
 const fs = require("fs/promises");
 const path = require("path");
 const { addRecentFile, getRecentFiles } = require("./recent-files");
 const { t } = require("../i18n/i18n-main");
 
-function registerIpcHandlers(mainWindow) {
-  ipcMain.handle("file:open", async () => {
-    const result = await dialog.showOpenDialog(mainWindow, {
+let registered = false;
+
+/**
+ * Register IPC handlers (once globally).
+ * All dialog calls use BrowserWindow.fromWebContents(event.sender)
+ * so they work correctly with multiple windows.
+ */
+function registerIpcHandlers() {
+  if (registered) return;
+  registered = true;
+
+  ipcMain.handle("file:open", async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const result = await dialog.showOpenDialog(win, {
       properties: ["openFile"],
       filters: [
         { name: t("dialog.filterMarkdown"), extensions: ["md", "markdown", "mdown", "mkd"] },
@@ -36,8 +47,9 @@ function registerIpcHandlers(mainWindow) {
     return true;
   });
 
-  ipcMain.handle("file:saveAs", async (_event, content) => {
-    const result = await dialog.showSaveDialog(mainWindow, {
+  ipcMain.handle("file:saveAs", async (event, content) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const result = await dialog.showSaveDialog(win, {
       filters: [
         { name: t("dialog.filterMarkdown"), extensions: ["md"] },
         { name: t("dialog.filterText"), extensions: ["txt"] },
@@ -54,8 +66,9 @@ function registerIpcHandlers(mainWindow) {
     return getRecentFiles();
   });
 
-  ipcMain.handle("diff:openFile", async () => {
-    const result = await dialog.showOpenDialog(mainWindow, {
+  ipcMain.handle("diff:openFile", async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const result = await dialog.showOpenDialog(win, {
       properties: ["openFile"],
       filters: [
         { name: t("dialog.filterMarkdown"), extensions: ["md", "markdown", "mdown", "mkd"] },
@@ -69,20 +82,9 @@ function registerIpcHandlers(mainWindow) {
     return { path: filePath, content };
   });
 
-  ipcMain.handle("window:setTitle", (_event, title) => {
-    if (mainWindow) mainWindow.setTitle(title);
-  });
-
-  ipcMain.handle("dialog:confirmSave", async () => {
-    const result = await dialog.showMessageBox(mainWindow, {
-      type: "warning",
-      buttons: [t("dialog.saveConfirmTitle"), t("dialog.saveConfirmDontSave"), t("dialog.saveConfirmCancel")],
-      defaultId: 0,
-      cancelId: 2,
-      message: t("dialog.saveConfirmMessage"),
-      detail: t("dialog.saveConfirmDetail"),
-    });
-    return result.response;
+  ipcMain.handle("window:setTitle", (event, title) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (win) win.setTitle(title);
   });
 }
 

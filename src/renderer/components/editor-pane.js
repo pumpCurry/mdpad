@@ -40,6 +40,7 @@ import { rectSelectExtension } from "./rect-select.js";
 const wrapCompartment = new Compartment();
 const closeBracketsCompartment = new Compartment();
 let editorView = null;
+let editorExtensions = null; // Saved for state recreation (clearHistory)
 let onChangeCallback = null;
 let wordWrapEnabled = true;
 let closeBracketsEnabled = true;
@@ -507,6 +508,8 @@ export function createEditor(container, onChange) {
     }),
   ];
 
+  editorExtensions = extensions;
+
   editorView = new EditorView({
     state: EditorState.create({
       doc: "",
@@ -536,6 +539,21 @@ export function setContent(text) {
       insert: text,
     },
   });
+}
+
+/**
+ * Reset undo/redo history.
+ * Creates a fresh EditorState with the same doc and extensions,
+ * discarding all history entries. Call after opening a new file
+ * to prevent Ctrl+Z from reverting to a previous file's content.
+ */
+export function clearHistory() {
+  if (!editorView || !editorExtensions) return;
+  const newState = EditorState.create({
+    doc: editorView.state.doc.toString(),
+    extensions: editorExtensions,
+  });
+  editorView.setState(newState);
 }
 
 export function toggleWordWrap() {

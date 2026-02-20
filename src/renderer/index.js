@@ -2,6 +2,7 @@ import {
   createEditor,
   getContent,
   setContent,
+  clearHistory,
   toggleWordWrap,
   toggleCloseBrackets,
   openSearch,
@@ -29,6 +30,7 @@ import { initI18n, t, setLocale, onLocaleChange } from "../i18n/i18n-renderer.js
 let currentFilePath = null;
 let originalContent = "";
 let isDirty = false;
+let suppressDirty = false; // Suppress isDirty changes during programmatic setContent
 
 // Session auto-save interval (ms) — lightweight, always on
 const SESSION_SAVE_INTERVAL = 5000;
@@ -206,6 +208,7 @@ async function init() {
 }
 
 function onEditorChange(content) {
+  if (suppressDirty) return; // Ignore changes during programmatic setContent
   isDirty = true;
   updateTitle();
 
@@ -225,6 +228,17 @@ function onEditorChange(content) {
 
   // Trigger global search update (event-based, not polling)
   triggerGlobalSearchUpdate();
+}
+
+/**
+ * Set editor content without triggering isDirty.
+ * Also resets undo history so Ctrl+Z can't revert past this point.
+ */
+function setContentClean(text) {
+  suppressDirty = true;
+  setContent(text);
+  clearHistory();
+  suppressDirty = false;
 }
 
 function updateTitle() {
@@ -325,7 +339,7 @@ async function handleMenuAction(action) {
       showRestoreFromBackupMenu();
       break;
     case "about":
-      alert(`${t("app.version")}\n${t("app.description")}\n\n(C)pumpCurry, 5r4ce2 ${new Date().getFullYear()}`);
+      showAboutDialog();
       break;
   }
 }
@@ -406,20 +420,187 @@ function showGoToLineDialog() {
   });
 }
 
-async function newFile() {
-  if (isDirty) {
-    const result = await window.mdpad.confirmSave();
-    if (result === 0) {
-      const saved = await saveFile();
-      if (!saved) return;
-    } else if (result === 2) {
+function showAboutDialog() {
+  // Prevent duplicate
+  if (document.getElementById("about-overlay")) return;
+
+  const overlay = document.createElement("div");
+  overlay.id = "about-overlay";
+  overlay.style.cssText =
+    "position:fixed;top:0;left:0;right:0;bottom:0;" +
+    "background:rgba(0,0,0,0.3);z-index:9999;" +
+    "display:flex;align-items:flex-start;justify-content:center;padding-top:20vh;";
+
+  const dialog = document.createElement("div");
+  dialog.style.cssText =
+    "background:#ffffff;border:1px solid #d0d7de;border-radius:8px;" +
+    "padding:20px;width:320px;box-shadow:0 8px 24px rgba(0,0,0,0.15);text-align:center;";
+
+  const titleEl = document.createElement("div");
+  titleEl.textContent = t("app.version");
+  titleEl.style.cssText = "font-size:16px;font-weight:700;color:#24292f;margin-bottom:8px;";
+  dialog.appendChild(titleEl);
+
+  const descEl = document.createElement("div");
+  descEl.textContent = t("app.description");
+  descEl.style.cssText = "font-size:14px;color:#57606a;margin-bottom:8px;";
+  dialog.appendChild(descEl);
+
+  const copyrightEl = document.createElement("div");
+  copyrightEl.textContent = `(C) pumpCurry, 5r4ce2 ${new Date().getFullYear()}`;
+  copyrightEl.style.cssText = "font-size:13px;color:#8b949e;margin-bottom:16px;";
+  dialog.appendChild(copyrightEl);
+
+  const closeBtn = document.createElement("button");
+  closeBtn.textContent = "OK";
+  closeBtn.style.cssText =
+    "padding:6px 24px;border:1px solid #d0d7de;border-radius:6px;" +
+    "background:#f6f8fa;cursor:pointer;font-size:13px;";
+  closeBtn.onclick = () => { overlay.remove(); focus(); };
+  dialog.appendChild(closeBtn);
+
+  overlay.appendChild(dialog);
+  document.body.appendChild(overlay);
+
+  closeBtn.focus();
+
+  overlay.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" || e.key === "Enter") {
+      e.preventDefault();
+      overlay.remove();
+      focus();
+    }
+  });
+
+  overlay.addEventListener("mousedown", (e) => {
+    if (e.target === overlay) { overlay.remove(); focus(); }
+  });
+}
+
+/**
+ * Show HTML confirmation dialog before discarding unsaved changes.
+ * Replaces native dialog.showMessageBox().
+ * Returns: "save" | "dontSave" | "cancel"
+ */
+function showConfirmSaveDialog() {
+  return new Promise((resolve) => {
+    // Prevent duplicate
+    if (document.getElementById("confirm-save-overlay")) {
+      resolve("cancel");
       return;
     }
+
+    const overlay = document.createElement("div");
+    overlay.id = "confirm-save-overlay";
+    overlay.style.cssText =
+      "position:fixed;top:0;left:0;right:0;bottom:0;" +
+      "background:rgba(0,0,0,0.4);z-index:10000;" +
+      "display:flex;align-items:flex-start;justify-content:center;padding-top:15vh;";
+
+    const modal = document.createElement("div");
+    modal.style.cssText =
+      "background:#ffffff;border:1px solid #d0d7de;border-radius:8px;" +
+      "padding:20px;width:420px;box-shadow:0 8px 24px rgba(0,0,0,0.2);";
+
+    // Title row with × button
+    const titleRow = document.createElement("div");
+    titleRow.style.cssText = "display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;";
+
+    const titleEl = document.createElement("div");
+    titleEl.textContent = t("dialog.saveConfirmMessage");
+    titleEl.style.cssText = "font-size:16px;font-weight:700;color:#24292f;";
+    titleRow.appendChild(titleEl);
+
+    const closeXBtn = document.createElement("button");
+    closeXBtn.textContent = "×";
+    closeXBtn.style.cssText =
+      "border:none;background:transparent;font-size:20px;color:#57606a;" +
+      "cursor:pointer;padding:0 4px;line-height:1;";
+    closeXBtn.onclick = () => done("cancel");
+    titleRow.appendChild(closeXBtn);
+    modal.appendChild(titleRow);
+
+    // Detail message
+    const msgEl = document.createElement("div");
+    msgEl.textContent = t("dialog.saveConfirmDetail");
+    msgEl.style.cssText = "font-size:14px;color:#57606a;margin-bottom:16px;line-height:1.5;";
+    modal.appendChild(msgEl);
+
+    // Buttons row: [Don't Save] ...space... [Cancel] [Save]
+    const btnRow = document.createElement("div");
+    btnRow.style.cssText = "display:flex;gap:8px;align-items:center;";
+
+    const dontSaveBtn = document.createElement("button");
+    dontSaveBtn.textContent = t("dialog.saveConfirmDontSave");
+    dontSaveBtn.style.cssText =
+      "padding:6px 16px;border:1px solid #cf222e;border-radius:6px;" +
+      "background:#fff;color:#cf222e;cursor:pointer;font-size:13px;" +
+      "margin-right:auto;";
+    dontSaveBtn.tabIndex = 3;
+    dontSaveBtn.onclick = () => done("dontSave");
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.textContent = t("dialog.saveConfirmCancel");
+    cancelBtn.style.cssText =
+      "padding:6px 16px;border:1px solid #d0d7de;border-radius:6px;" +
+      "background:#f6f8fa;cursor:pointer;font-size:13px;";
+    cancelBtn.tabIndex = 2;
+    cancelBtn.onclick = () => done("cancel");
+
+    const saveBtn = document.createElement("button");
+    saveBtn.textContent = t("dialog.saveConfirmTitle");
+    saveBtn.style.cssText =
+      "padding:6px 16px;border:none;border-radius:6px;" +
+      "background:#2da44e;color:#fff;cursor:pointer;font-size:13px;font-weight:600;";
+    saveBtn.tabIndex = 1;
+    saveBtn.onclick = () => done("save");
+
+    btnRow.appendChild(dontSaveBtn);
+    btnRow.appendChild(cancelBtn);
+    btnRow.appendChild(saveBtn);
+    modal.appendChild(btnRow);
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    // Keyboard support
+    overlay.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        done("cancel");
+      }
+    });
+
+    // Click overlay background → cancel
+    overlay.addEventListener("mousedown", (e) => {
+      if (e.target === overlay) done("cancel");
+    });
+
+    // Focus primary button
+    saveBtn.focus();
+
+    function done(result) {
+      overlay.remove();
+      resolve(result);
+    }
+  });
+}
+
+async function newFile() {
+  if (isDirty) {
+    const result = await showConfirmSaveDialog();
+    if (result === "save") {
+      const saved = await saveFile();
+      if (!saved) return;
+    } else if (result === "cancel") {
+      return;
+    }
+    // "dontSave" → proceed without saving
   }
   currentFilePath = null;
   originalContent = "";
   isDirty = false;
-  setContent("");
+  setContentClean("");
   setOriginalContent("");
   setPreviewBaseDir(null);
   updateTitle();
@@ -433,11 +614,11 @@ async function newFile() {
 
 async function openFile() {
   if (isDirty) {
-    const result = await window.mdpad.confirmSave();
-    if (result === 0) {
+    const result = await showConfirmSaveDialog();
+    if (result === "save") {
       const saved = await saveFile();
       if (!saved) return;
-    } else if (result === 2) {
+    } else if (result === "cancel") {
       return;
     }
   }
@@ -448,7 +629,7 @@ async function openFile() {
   currentFilePath = result.path;
   originalContent = result.content;
   isDirty = false;
-  setContent(result.content);
+  setContentClean(result.content);
   setOriginalContent(result.content);
   setPreviewBaseDir(result.path);
   updateTitle();
@@ -499,7 +680,7 @@ async function loadFileByPath(filePath) {
   currentFilePath = result.path;
   originalContent = result.content;
   isDirty = false;
-  setContent(result.content);
+  setContentClean(result.content);
   setOriginalContent(result.content);
   setPreviewBaseDir(result.path);
   updateTitle();
@@ -575,16 +756,14 @@ function initDragAndDrop() {
  */
 async function openFileInCurrentWindow(filePath) {
   if (isDirty) {
-    const result = await window.mdpad.confirmSave();
-    if (result === 0) {
-      // Save first
+    const result = await showConfirmSaveDialog();
+    if (result === "save") {
       const saved = await saveFile();
       if (!saved) return;
-    } else if (result === 2) {
-      // Cancel
+    } else if (result === "cancel") {
       return;
     }
-    // result === 1: Don't save — proceed
+    // "dontSave" → proceed without saving
   }
 
   await loadFileByPath(filePath);
@@ -1031,7 +1210,11 @@ async function performRestore(rec) {
     currentFilePath = null;
   }
 
+  // Set content without triggering isDirty, then reset history
+  suppressDirty = true;
   setContent(rec.content);
+  clearHistory();
+  suppressDirty = false;
   setPreviewBaseDir(currentFilePath);
 
   // Restore originalContent for diff

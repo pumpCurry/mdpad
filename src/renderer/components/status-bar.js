@@ -17,6 +17,7 @@ function renderStatusBar() {
     <span id="sb-lines">0 ${t("statusBar.lines")}</span>
     <span id="sb-ins" style="display:none;color:#cf222e;font-weight:600">&lt;INS&gt;</span>
     <span class="spacer"></span>
+    <span id="sb-zoom" style="cursor:default;min-width:40px;text-align:center">100%</span>
     <span id="sb-encoding">${t("statusBar.encoding")}</span>
     <span id="sb-filetype">${t("statusBar.filetype")}</span>
   `;
@@ -25,6 +26,20 @@ function renderStatusBar() {
   statusBarEl.querySelector("#sb-cursor").addEventListener("click", () => {
     window.dispatchEvent(new CustomEvent("mdpad:goToLine"));
   });
+}
+
+/**
+ * Convert Electron's zoom level (logarithmic) to a display percentage.
+ * Electron zoom level 0 = 100%, 1 ≈ 120%, -1 ≈ 83%, etc.
+ * Formula: percentage = 100 * 1.2^zoomLevel
+ */
+function getZoomPercent() {
+  try {
+    const level = window.mdpad.getZoomLevel();
+    return Math.round(100 * Math.pow(1.2, level));
+  } catch {
+    return 100;
+  }
 }
 
 export function updateStatusBar() {
@@ -44,6 +59,12 @@ export function updateStatusBar() {
     const insEl = statusBarEl.querySelector("#sb-ins");
     if (insEl) {
       insEl.style.display = isOverwriteMode() ? "" : "none";
+    }
+
+    // Update zoom percentage
+    const zoomEl = statusBarEl.querySelector("#sb-zoom");
+    if (zoomEl) {
+      zoomEl.textContent = getZoomPercent() + "%";
     }
   });
 }
