@@ -7,6 +7,8 @@ import {
   openSearch,
   focus,
   getEditor,
+  goToLine,
+  getCursorInfo,
 } from "./components/editor-pane.js";
 import { initPreview, updatePreview, updatePreviewImmediate, setOriginalContent } from "./components/preview-pane.js";
 import { initDiff, updateDiff } from "./components/diff-pane.js";
@@ -85,7 +87,7 @@ async function init() {
     editor.scrollDOM.addEventListener("scroll", () => {
       const state = getPaneState();
       if (state.preview) {
-        syncEditorToPreview(editor, document.getElementById("preview-pane"));
+        syncEditorToPreview(editor, document.querySelector("#preview-pane .preview-content"));
       }
     });
   }
@@ -111,6 +113,9 @@ async function init() {
     handleMenuAction(action);
   });
 
+  // Status bar click → Go to Line
+  window.addEventListener("mdpad:goToLine", () => showGoToLineDialog());
+
   // Expose close-state getter for main process (via executeJavaScript)
   window.__mdpadGetCloseState = () => ({
     isDirty,
@@ -120,6 +125,9 @@ async function init() {
 
   // Expose content getter for main process save-on-close
   window.__mdpadGetContent = () => getContent();
+
+  // Expose editor view for smoke tests
+  window.__mdpadEditor = () => getEditor();
 
   // Session auto-save for crash recovery (lightweight, always on)
   setInterval(() => {
@@ -140,6 +148,22 @@ async function init() {
 
   // Set up drag-and-drop
   initDragAndDrop();
+
+  // Intercept all link clicks in preview/diff panes → open in external browser
+  document.addEventListener("click", (e) => {
+    const link = e.target.closest("a[href]");
+    if (!link) return;
+
+    const href = link.getAttribute("href");
+    if (!href) return;
+
+    // Only intercept http/https links
+    if (/^https?:\/\//i.test(href)) {
+      e.preventDefault();
+      e.stopPropagation();
+      window.mdpad.openExternal(href);
+    }
+  });
 
   // Focus editor
   focus();
@@ -255,10 +279,89 @@ async function handleMenuAction(action) {
         }
       }
       break;
+    case "goToLine":
+      showGoToLineDialog();
+      break;
     case "about":
       alert(`${t("app.version")}\n${t("app.description")}\n\n(C)pumpCurry, 5r4ce2 ${new Date().getFullYear()}`);
       break;
   }
+}
+
+function showGoToLineDialog() {
+  // Prevent duplicate dialogs
+  if (document.getElementById("goto-line-overlay")) return;
+
+  const info = getCursorInfo();
+  const totalLines = info.totalLines || 0;
+
+  // Create overlay
+  const overlay = document.createElement("div");
+  overlay.id = "goto-line-overlay";
+  overlay.style.cssText =
+    "position:fixed;top:0;left:0;right:0;bottom:0;" +
+    "background:rgba(0,0,0,0.3);z-index:9999;" +
+    "display:flex;align-items:flex-start;justify-content:center;padding-top:20vh;";
+
+  // Create dialog box
+  const dialog = document.createElement("div");
+  dialog.style.cssText =
+    "background:#ffffff;border:1px solid #d0d7de;border-radius:8px;" +
+    "padding:16px;width:300px;box-shadow:0 8px 24px rgba(0,0,0,0.15);";
+
+  const titleEl = document.createElement("div");
+  titleEl.textContent = t("goToLine.title");
+  titleEl.style.cssText = "font-size:14px;font-weight:600;margin-bottom:8px;color:#24292f;";
+
+  const input = document.createElement("input");
+  input.type = "number";
+  input.min = 1;
+  input.max = totalLines;
+  input.placeholder = `${t("goToLine.placeholder")} (1-${totalLines})`;
+  input.style.cssText =
+    "width:100%;padding:6px 8px;border:1px solid #d0d7de;" +
+    "border-radius:4px;font-size:14px;outline:none;box-sizing:border-box;";
+
+  const errorEl = document.createElement("div");
+  errorEl.style.cssText = "font-size:12px;color:#cf222e;margin-top:4px;min-height:18px;";
+
+  dialog.appendChild(titleEl);
+  dialog.appendChild(input);
+  dialog.appendChild(errorEl);
+  overlay.appendChild(dialog);
+  document.body.appendChild(overlay);
+
+  input.focus();
+
+  function close() {
+    overlay.remove();
+    focus();
+  }
+
+  function submit() {
+    const val = parseInt(input.value, 10);
+    if (isNaN(val) || val < 1 || val > totalLines) {
+      errorEl.textContent = t("goToLine.outOfRange");
+      input.select();
+      return;
+    }
+    goToLine(val);
+    close();
+  }
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      submit();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      close();
+    }
+  });
+
+  overlay.addEventListener("mousedown", (e) => {
+    if (e.target === overlay) close();
+  });
 }
 
 async function newFile() {

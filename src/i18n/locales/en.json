@@ -20,6 +20,7 @@
     "edit_redo": "Redo",
     "edit_find": "Find...",
     "edit_replace": "Replace...",
+    "edit_goToLine": "Go to Line...",
     "view": "View",
     "view_toggleEditor": "Toggle Editor Pane",
     "view_togglePreview": "Toggle Preview Pane",
@@ -120,5 +121,10 @@
     "selectFile": "Select a file to compare",
     "mermaidError": "Mermaid Error:",
     "noChanges": "No changes"
+  },
+  "goToLine": {
+    "title": "Go to Line",
+    "placeholder": "Enter line number",
+    "outOfRange": "Line number out of range"
   }
 }

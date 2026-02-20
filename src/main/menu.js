@@ -101,6 +101,12 @@ function createMenu(mainWindow) {
           accelerator: "CmdOrCtrl+H",
           click: () => mainWindow.webContents.send("menu:action", "replace"),
         },
+        { type: "separator" },
+        {
+          label: t("menu.edit_goToLine"),
+          accelerator: "CmdOrCtrl+G",
+          click: () => mainWindow.webContents.send("menu:action", "goToLine"),
+        },
       ],
     },
     {
