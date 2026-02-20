@@ -26,8 +26,11 @@ contextBridge.exposeInMainWorld("mdpad", {
   getRecoverySessions: () => ipcRenderer.invoke("session:getRecovery"),
   clearSession: () => ipcRenderer.invoke("session:clear"),
 
-  // Drag & drop: open file in new window
+  // Open file in new instance (separate process)
   openFileInNewWindow: (filePath) => ipcRenderer.invoke("drop:openInNewWindow", filePath),
+
+  // Open a new empty window (separate process)
+  newWindow: () => ipcRenderer.invoke("window:newWindow"),
 
   // Autosave (backup)
   getAutosaveMinutes: () => ipcRenderer.invoke("autosave:getMinutes"),

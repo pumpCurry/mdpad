@@ -490,6 +490,15 @@ export function createEditor(container, onChange) {
     overwriteModePlugin(),
     overwriteInputHandler(),
     searchMatchCountPlugin(),
+    // Disable CodeMirror's built-in drop handler — all DnD is managed by index.js
+    EditorView.domEventHandlers({
+      drop(event) {
+        // Prevent CodeMirror from inserting dropped file content
+        event.preventDefault();
+        event.stopPropagation();
+        return true; // Signal to CM that we handled it
+      },
+    }),
     EditorView.updateListener.of((update) => {
       if (update.docChanged && onChangeCallback) {
         onChangeCallback(update.state.doc.toString());

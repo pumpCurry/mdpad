@@ -14,6 +14,7 @@
     "file_autosave": "自動バックアップ",
     "autosave_off": "OFF",
     "autosave_min": "分",
+    "file_newWindow": "新しいウィンドウ",
     "file_restoreBackup": "バックアップから復元...",
     "file_exit": "終了",
     "edit": "編集",

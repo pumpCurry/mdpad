@@ -14,6 +14,7 @@
     "file_autosave": "Auto Backup",
     "autosave_off": "OFF",
     "autosave_min": "min",
+    "file_newWindow": "New Window",
     "file_restoreBackup": "Restore from Backup...",
     "file_exit": "Exit",
     "edit": "Edit",

@@ -282,6 +282,9 @@ async function handleMenuAction(action) {
     case "goToLine":
       showGoToLineDialog();
       break;
+    case "newWindow":
+      window.mdpad.newWindow();
+      break;
     case "restoreBackup":
       showRestoreFromBackupMenu();
       break;
@@ -492,17 +495,22 @@ function initDragAndDrop() {
     if (!files || files.length === 0) return;
 
     const file = files[0];
+    const filePath = file.path;
+    if (!filePath) return;
 
-    // DnD Insert Mode toggle:
-    //   OFF (default): ALL drops anywhere open the file in a new window
-    //   ON: drops on editor insert content, drops elsewhere open the file
-    if (isDndInsertMode() && isInsideEditor(e.target, editorPaneEl)) {
-      // --- Insert mode: read file content and insert at cursor/drop position ---
+    // DnD behavior:
+    //   Shift+Drop (anywhere): open file in CURRENT window (replace, with confirmation)
+    //   DnD Insert Mode ON + drop on editor: insert content at cursor
+    //   Default (no modifier, insert mode off): open in NEW process
+    if (e.shiftKey) {
+      // --- Shift+Drop: replace current document ---
+      await openFileInCurrentWindow(filePath);
+    } else if (isDndInsertMode() && isInsideEditor(e.target, editorPaneEl)) {
+      // --- Insert mode: read file content and insert at drop position ---
       try {
         const text = await readFileAsText(file);
         const editor = getEditor();
         if (editor) {
-          // Try to get drop position from CodeMirror
           const pos = editor.posAtCoords({ x: e.clientX, y: e.clientY });
           const insertPos = pos != null ? pos : editor.state.selection.main.head;
           editor.dispatch({
@@ -515,14 +523,31 @@ function initDragAndDrop() {
         // Non-text file — ignore
       }
     } else {
-      // --- Open mode: open file in a new window ---
-      // Use the file path from dataTransfer (Electron provides the full path)
-      const filePath = file.path;
-      if (filePath) {
-        await window.mdpad.openFileInNewWindow(filePath);
-      }
+      // --- Default: open in a new process ---
+      await window.mdpad.openFileInNewWindow(filePath);
     }
   });
+}
+
+/**
+ * Open a file in the current window, replacing current content.
+ * Shows confirmation if current document has unsaved changes.
+ */
+async function openFileInCurrentWindow(filePath) {
+  if (isDirty) {
+    const result = await window.mdpad.confirmSave();
+    if (result === 0) {
+      // Save first
+      const saved = await saveFile();
+      if (!saved) return;
+    } else if (result === 2) {
+      // Cancel
+      return;
+    }
+    // result === 1: Don't save — proceed
+  }
+
+  await loadFileByPath(filePath);
 }
 
 /**
