@@ -38,6 +38,7 @@ function resolveExePath() {
   if (arg) return path.resolve(arg);
 
   const candidates = [
+    path.join(__dirname, "..", "build3", "win-unpacked", "mdpad.exe"),
     path.join(__dirname, "..", "build2", "win-unpacked", "mdpad.exe"),
     path.join(__dirname, "..", "build", "win-unpacked", "mdpad.exe"),
   ];
