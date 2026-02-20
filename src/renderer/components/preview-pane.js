@@ -19,6 +19,9 @@ let diffFileContent = null;
 let diffFilePath = null;
 let diffSource = "history"; // "history" or "file"
 
+// Base directory for resolving relative paths in preview (set by the editor)
+let baseDir = null;
+
 export function initPreview(container) {
   previewContainer = container;
   buildPreviewUI();
@@ -144,6 +147,21 @@ export function setOriginalContent(content) {
   originalSource = content;
 }
 
+/**
+ * Set the base directory for resolving relative asset paths in preview.
+ * Should be called whenever the current file path changes.
+ * @param {string|null} filePath - Absolute path to the currently edited file
+ */
+export function setPreviewBaseDir(filePath) {
+  if (filePath) {
+    // Extract directory from file path (handle both \ and /)
+    const lastSep = Math.max(filePath.lastIndexOf("/"), filePath.lastIndexOf("\\"));
+    baseDir = lastSep >= 0 ? filePath.substring(0, lastSep) : null;
+  } else {
+    baseDir = null;
+  }
+}
+
 const SANITIZE_OPTS = {
   ADD_TAGS: [
     "math", "semantics", "mrow", "mi", "mo", "mn", "msup", "msub",
@@ -159,6 +177,7 @@ async function doRender(markdownSource) {
   const body = contentEl.querySelector(".markdown-body");
   const rawHtml = renderMarkdown(markdownSource);
   body.innerHTML = DOMPurify.sanitize(rawHtml, SANITIZE_OPTS);
+  resolveRelativePaths(body);
   await renderMermaidBlocks(body);
 }
 
@@ -179,7 +198,61 @@ async function doRenderRichDiff() {
 
   const diffHtml = renderMarkdownDiff(oldText, currentSource);
   body.innerHTML = DOMPurify.sanitize(diffHtml, SANITIZE_OPTS);
+  resolveRelativePaths(body);
   await renderMermaidBlocks(body);
+}
+
+/**
+ * Resolve relative paths in src/href attributes of media elements.
+ * Converts relative paths to file:// URLs based on the edited file's directory.
+ * Leaves absolute paths, http/https, data: URIs, and # anchors unchanged.
+ */
+function resolveRelativePaths(container) {
+  if (!baseDir) return;
+
+  // Normalize baseDir to forward slashes for file:// URL
+  const baseDirUrl = baseDir.replace(/\\/g, "/");
+
+  // Elements with src: img, video, audio, source, embed
+  const srcElements = container.querySelectorAll("img[src], video[src], audio[src], source[src], embed[src]");
+  for (const el of srcElements) {
+    const src = el.getAttribute("src");
+    if (!src) continue;
+    if (isAbsoluteOrSpecial(src)) continue;
+    el.setAttribute("src", `file:///${baseDirUrl}/${src}`);
+  }
+
+  // Elements with href that could reference local assets (link, a with local file refs)
+  // We only fix <a> tags whose href looks like a local file (not http/https/#)
+  // This handles cases like [download](./file.pdf)
+  const linkElements = container.querySelectorAll("a[href]");
+  for (const el of linkElements) {
+    const href = el.getAttribute("href");
+    if (!href) continue;
+    if (isAbsoluteOrSpecial(href)) continue;
+    // Only resolve if it looks like a file reference (has an extension)
+    if (/\.\w{1,10}$/.test(href)) {
+      el.setAttribute("href", `file:///${baseDirUrl}/${href}`);
+    }
+  }
+
+  // poster attribute on video
+  const posterElements = container.querySelectorAll("video[poster]");
+  for (const el of posterElements) {
+    const poster = el.getAttribute("poster");
+    if (!poster) continue;
+    if (isAbsoluteOrSpecial(poster)) continue;
+    el.setAttribute("poster", `file:///${baseDirUrl}/${poster}`);
+  }
+}
+
+/**
+ * Check if a path is absolute or a special URI (http, https, data, file, #, //)
+ */
+function isAbsoluteOrSpecial(path) {
+  return /^(https?:|data:|file:|blob:|\/\/|#)/i.test(path) ||
+         /^[A-Za-z]:[/\\]/.test(path) ||  // Windows absolute: C:\... or C:/...
+         path.startsWith("/");             // Unix absolute
 }
 
 async function renderMermaidBlocks(container) {

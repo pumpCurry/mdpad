@@ -10,7 +10,7 @@ import {
   goToLine,
   getCursorInfo,
 } from "./components/editor-pane.js";
-import { initPreview, updatePreview, updatePreviewImmediate, setOriginalContent } from "./components/preview-pane.js";
+import { initPreview, updatePreview, updatePreviewImmediate, setOriginalContent, setPreviewBaseDir } from "./components/preview-pane.js";
 import { initDiff, updateDiff } from "./components/diff-pane.js";
 import {
   initPaneManager,
@@ -421,6 +421,7 @@ async function newFile() {
   isDirty = false;
   setContent("");
   setOriginalContent("");
+  setPreviewBaseDir(null);
   updateTitle();
   await window.mdpad.clearSession();
   await window.mdpad.clearAutosaveBackup();
@@ -449,6 +450,7 @@ async function openFile() {
   isDirty = false;
   setContent(result.content);
   setOriginalContent(result.content);
+  setPreviewBaseDir(result.path);
   updateTitle();
   await window.mdpad.clearSession();
   await window.mdpad.clearAutosaveBackup();
@@ -480,6 +482,7 @@ async function saveFileAs() {
   currentFilePath = result.path;
   originalContent = content;
   setOriginalContent(content);
+  setPreviewBaseDir(result.path);
   isDirty = false;
   updateTitle();
   await window.mdpad.clearSession();
@@ -498,6 +501,7 @@ async function loadFileByPath(filePath) {
   isDirty = false;
   setContent(result.content);
   setOriginalContent(result.content);
+  setPreviewBaseDir(result.path);
   updateTitle();
   await window.mdpad.clearSession();
   await window.mdpad.clearAutosaveBackup();
@@ -1028,6 +1032,7 @@ async function performRestore(rec) {
   }
 
   setContent(rec.content);
+  setPreviewBaseDir(currentFilePath);
 
   // Restore originalContent for diff
   if (rec.source === "autosave" && rec.originalContent) {
