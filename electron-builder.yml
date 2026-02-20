@@ -3,7 +3,7 @@ productName: mdpad
 copyright: "(C) pumpCurry, 5r4ce2"
 
 directories:
-  output: build8
+  output: build10
 
 files:
   - src/**/*

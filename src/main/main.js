@@ -17,6 +17,10 @@ const {
   removeOrphanedBackup,
 } = require("./autosave-manager");
 
+// Explicitly allow multiple instances — no single-instance lock.
+// Each window runs as a separate process via spawnNewInstance().
+// Do NOT call app.requestSingleInstanceLock() — that would block 2nd+ instances.
+
 let mainWindow = null;
 let forceQuit = false;
 let ipcRegistered = false; // IPC handlers registered once globally
@@ -60,13 +64,14 @@ function createWindow(openFilePath) {
   // Each window gets its own resolver
   let closeDialogResolve = null;
 
-  ipcMain.on("close:dialogResult", (event, result) => {
+  const closeDialogListener = (event, result) => {
     // Only handle events from this window's webContents
     if (event.sender === win.webContents && closeDialogResolve) {
       closeDialogResolve(result);
       closeDialogResolve = null;
     }
-  });
+  };
+  ipcMain.on("close:dialogResult", closeDialogListener);
 
   // Close handler: intercept and ask renderer for dirty state
   win.on("close", async (e) => {
@@ -164,6 +169,8 @@ function createWindow(openFilePath) {
   });
 
   win.on("closed", () => {
+    // Clean up the close dialog listener for this window
+    ipcMain.removeListener("close:dialogResult", closeDialogListener);
     if (win === mainWindow) {
       mainWindow = null;
     }
@@ -267,14 +274,14 @@ function createWindow(openFilePath) {
       removeOrphanedBackup(backupFilePath);
     });
 
-    // IPC: open file in a separate process (independent instance)
+    // IPC: open file in a new window (same process, different BrowserWindow)
     ipcMain.handle("drop:openInNewWindow", (_event, filePath) => {
-      spawnNewInstance(filePath);
+      createWindow(filePath);
     });
 
-    // IPC: open a new empty window (separate process)
+    // IPC: open a new empty window (same process)
     ipcMain.handle("window:newWindow", () => {
-      spawnNewInstance(null);
+      createWindow(null);
     });
 
     // IPC: open URL in external browser
@@ -363,10 +370,18 @@ function isProcessRunning(pid) {
 function spawnNewInstance(filePath) {
   const { spawn } = require("child_process");
   const exePath = app.getPath("exe");
-  const args = filePath ? ["--", filePath] : [];
+
+  // In dev mode (electron .), exe points to electron.exe — need to add "." arg
+  const isDevMode = !app.isPackaged;
+  const baseArgs = isDevMode ? ["."] : [];
+  const args = filePath
+    ? [...baseArgs, "--", filePath]
+    : baseArgs;
+
   spawn(exePath, args, {
     detached: true,
     stdio: "ignore",
+    cwd: isDevMode ? path.join(__dirname, "..", "..") : undefined,
   }).unref();
 }
 
@@ -429,10 +444,42 @@ function getFileArgFromCommandLine() {
   }
 }
 
-app.whenReady().then(() => {
-  const openFilePath = getFileArgFromCommandLine();
-  createWindow(openFilePath);
-});
+// Attempt single-instance lock. If another instance is already running,
+// send the file argument to it and quit this one.
+const gotLock = app.requestSingleInstanceLock();
+
+if (!gotLock) {
+  // Another instance is running — it will handle the second-instance event.
+  app.quit();
+} else {
+  // We are the primary instance.
+  // When a second instance is launched, open a new window in THIS process.
+  app.on("second-instance", (_event, argv) => {
+    // Extract file path from the new instance's argv
+    let filePath = null;
+    const dashIdx = argv.indexOf("--");
+    if (dashIdx !== -1 && argv.length > dashIdx + 1) {
+      const candidate = argv[dashIdx + 1];
+      if (fs.existsSync(candidate)) filePath = candidate;
+    }
+    if (!filePath) {
+      const last = argv[argv.length - 1];
+      if (last && !last.startsWith("-") && last !== "." && last !== "/?" &&
+          ![".exe", ".lnk"].includes(path.extname(last).toLowerCase()) &&
+          fs.existsSync(last)) {
+        filePath = last;
+      }
+    }
+
+    // Create a new window in this process
+    createWindow(filePath);
+  });
+
+  app.whenReady().then(() => {
+    const openFilePath = getFileArgFromCommandLine();
+    createWindow(openFilePath);
+  });
+}
 
 app.on("window-all-closed", () => {
   app.quit();
