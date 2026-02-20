@@ -264,9 +264,14 @@ function createWindow(openFilePath) {
       removeOrphanedBackup(backupFilePath);
     });
 
-    // IPC: open file in new window (for drag-and-drop)
+    // IPC: open file in a separate process (independent instance)
     ipcMain.handle("drop:openInNewWindow", (_event, filePath) => {
-      createWindow(filePath);
+      spawnNewInstance(filePath);
+    });
+
+    // IPC: open a new empty window (separate process)
+    ipcMain.handle("window:newWindow", () => {
+      spawnNewInstance(null);
     });
 
     // IPC: open URL in external browser
@@ -348,7 +353,41 @@ function isProcessRunning(pid) {
   }
 }
 
-app.whenReady().then(createWindow);
+/**
+ * Spawn a separate mdpad process (independent instance).
+ * If filePath is provided, pass it as a command-line argument.
+ */
+function spawnNewInstance(filePath) {
+  const { spawn } = require("child_process");
+  const exePath = app.getPath("exe");
+  const args = filePath ? ["--", filePath] : [];
+  spawn(exePath, args, {
+    detached: true,
+    stdio: "ignore",
+  }).unref();
+}
+
+// Handle command-line file argument (from spawned instance)
+function getFileArgFromCommandLine() {
+  const args = process.argv;
+  // Look for file path after "--" or as last argument
+  const dashIdx = args.indexOf("--");
+  if (dashIdx !== -1 && args.length > dashIdx + 1) {
+    const filePath = args[dashIdx + 1];
+    if (fs.existsSync(filePath)) return filePath;
+  }
+  // Also check last argument (for OS-level file association)
+  const last = args[args.length - 1];
+  if (last && !last.startsWith("-") && last !== "." && fs.existsSync(last)) {
+    return last;
+  }
+  return null;
+}
+
+app.whenReady().then(() => {
+  const openFilePath = getFileArgFromCommandLine();
+  createWindow(openFilePath);
+});
 
 app.on("window-all-closed", () => {
   app.quit();

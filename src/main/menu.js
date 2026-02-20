@@ -44,6 +44,11 @@ function createMenu(mainWindow) {
           click: () => mainWindow.webContents.send("menu:action", "new"),
         },
         {
+          label: t("menu.file_newWindow"),
+          accelerator: "CmdOrCtrl+Shift+N",
+          click: () => mainWindow.webContents.send("menu:action", "newWindow"),
+        },
+        {
           label: t("menu.file_open"),
           accelerator: "CmdOrCtrl+O",
           click: () => mainWindow.webContents.send("menu:action", "open"),
