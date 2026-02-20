@@ -164,13 +164,31 @@ async function init() {
   initDragAndDrop();
 
   // Intercept ALL link clicks — the app's HTML must never be replaced.
-  // http/https → open in external browser; everything else → block silently.
+  // http/https → open in external browser
+  // #anchor within preview/diff → scroll within pane (safe, no navigation)
+  // everything else → block silently
   document.addEventListener("click", (e) => {
     const link = e.target.closest("a[href]");
     if (!link) return;
 
     const href = link.getAttribute("href");
     if (!href) return;
+
+    // #anchor links inside preview/diff panes → allow in-pane scroll
+    if (href.startsWith("#")) {
+      const previewPane = link.closest("#preview-pane, #diff-pane");
+      if (previewPane) {
+        e.preventDefault();
+        e.stopPropagation();
+        // Find the target element by id within the pane
+        const targetId = CSS.escape(href.slice(1));
+        const target = previewPane.querySelector(`[id="${targetId}"]`);
+        if (target) {
+          target.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+        return;
+      }
+    }
 
     // Always prevent default navigation for any link
     e.preventDefault();
@@ -180,7 +198,7 @@ async function init() {
     if (/^https?:\/\//i.test(href)) {
       window.mdpad.openExternal(href);
     }
-    // All other links (file://, #anchors, relative paths, etc.) are silently blocked
+    // All other links (file://, relative paths, etc.) are silently blocked
   });
 
   // Focus editor
