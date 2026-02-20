@@ -14,6 +14,7 @@
     "file_autosave": "自動バックアップ",
     "autosave_off": "OFF",
     "autosave_min": "分",
+    "file_restoreBackup": "バックアップから復元...",
     "file_exit": "終了",
     "edit": "編集",
     "edit_undo": "元に戻す",
@@ -121,6 +122,20 @@
     "selectFile": "比較するファイルを選択してください",
     "mermaidError": "Mermaidエラー:",
     "noChanges": "変更なし"
+  },
+  "recovery": {
+    "title": "ドキュメントの回復",
+    "description": "以下のバックアップが見つかりました。復元するものを選択してください:",
+    "noBackups": "バックアップはありません。",
+    "source_autosave": "自動バックアップ",
+    "source_session": "セッション",
+    "untitled": "無題",
+    "restore": "復元",
+    "ignoreAll": "すべて無視",
+    "close": "閉じる",
+    "confirmReplace": "現在のドキュメントに未保存の変更があります。破棄してバックアップから復元しますか？",
+    "confirmDiscard": "破棄して復元",
+    "confirmCancel": "キャンセル"
   },
   "goToLine": {
     "title": "行にジャンプ",

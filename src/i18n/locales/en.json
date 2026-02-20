@@ -14,6 +14,7 @@
     "file_autosave": "Auto Backup",
     "autosave_off": "OFF",
     "autosave_min": "min",
+    "file_restoreBackup": "Restore from Backup...",
     "file_exit": "Exit",
     "edit": "Edit",
     "edit_undo": "Undo",
@@ -121,6 +122,20 @@
     "selectFile": "Select a file to compare",
     "mermaidError": "Mermaid Error:",
     "noChanges": "No changes"
+  },
+  "recovery": {
+    "title": "Document Recovery",
+    "description": "The following backups were found. Select one to restore:",
+    "noBackups": "No backups available.",
+    "source_autosave": "Auto Backup",
+    "source_session": "Session",
+    "untitled": "Untitled",
+    "restore": "Restore",
+    "ignoreAll": "Ignore All",
+    "close": "Close",
+    "confirmReplace": "Current document has unsaved changes. Discard and restore from backup?",
+    "confirmDiscard": "Discard",
+    "confirmCancel": "Cancel"
   },
   "goToLine": {
     "title": "Go to Line",

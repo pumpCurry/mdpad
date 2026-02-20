@@ -282,6 +282,9 @@ async function handleMenuAction(action) {
     case "goToLine":
       showGoToLineDialog();
       break;
+    case "restoreBackup":
+      showRestoreFromBackupMenu();
+      break;
     case "about":
       alert(`${t("app.version")}\n${t("app.description")}\n\n(C)pumpCurry, 5r4ce2 ${new Date().getFullYear()}`);
       break;
@@ -600,105 +603,359 @@ function performAutosaveBackup() {
 
 // --- Recovery: check for orphaned sessions and autosave backups ---
 
+async function gatherRecoveries() {
+  const sessions = await window.mdpad.getRecoverySessions();
+  const autosaves = await window.mdpad.getOrphanedAutosaves();
+  const allRecoveries = [];
+
+  if (autosaves && autosaves.length > 0) {
+    for (const backup of autosaves) {
+      allRecoveries.push({ ...backup, source: "autosave" });
+    }
+  }
+
+  if (sessions && sessions.length > 0) {
+    for (const session of sessions) {
+      const alreadyHas = allRecoveries.some(
+        (r) => r.filePath && r.filePath === session.filePath
+      );
+      if (!alreadyHas) {
+        allRecoveries.push({ ...session, source: "session" });
+      }
+    }
+  }
+
+  // Sort newest first
+  allRecoveries.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+  return { allRecoveries, autosaves, sessions };
+}
+
 async function checkRecovery() {
   try {
-    // 1. Check session files (lightweight crash recovery)
-    const sessions = await window.mdpad.getRecoverySessions();
-
-    // 2. Check autosave backups (more comprehensive, includes originalContent)
-    const autosaves = await window.mdpad.getOrphanedAutosaves();
-
-    // Merge: prefer autosave backup (has originalContent for diff), fall back to session
-    const allRecoveries = [];
-
-    if (autosaves && autosaves.length > 0) {
-      for (const backup of autosaves) {
-        allRecoveries.push({
-          ...backup,
-          source: "autosave",
-        });
-      }
-    }
-
-    if (sessions && sessions.length > 0) {
-      for (const session of sessions) {
-        // Don't add if we already have an autosave for the same file
-        const alreadyHas = allRecoveries.some(
-          (r) => r.filePath && r.filePath === session.filePath
-        );
-        if (!alreadyHas) {
-          allRecoveries.push({
-            ...session,
-            source: "session",
-          });
-        }
-      }
-    }
-
+    const { allRecoveries, autosaves } = await gatherRecoveries();
     if (allRecoveries.length === 0) return;
 
-    // Recover the most recent one
-    const latest = allRecoveries.sort(
-      (a, b) => (b.savedAt || 0) - (a.savedAt || 0)
-    )[0];
-    if (!latest || !latest.content) return;
-
-    const fileName = latest.filePath
-      ? latest.filePath.split(/[\\/]/).pop()
-      : t("app.untitled");
-
-    // Ask user if they want to recover
-    const recover = confirm(
-      `${t("app.name")}: ${fileName}\n\n` +
-        (latest.filePath
-          ? `${t("dialog.recoveryMessageFile")} ${fileName}`
-          : t("dialog.recoveryMessageNew"))
-    );
-
-    if (recover) {
-      if (latest.filePath) {
-        currentFilePath = latest.filePath;
-      }
-      setContent(latest.content);
-
-      // Restore original content for diff:
-      // prefer autosave's stored originalContent, then try loading from file
-      if (latest.source === "autosave" && latest.originalContent) {
-        originalContent = latest.originalContent;
-        setOriginalContent(latest.originalContent);
-      } else if (latest.filePath) {
-        try {
-          const orig = await window.mdpad.openFileByPath(latest.filePath);
-          if (orig) {
-            originalContent = orig.content;
-            setOriginalContent(orig.content);
-          }
-        } catch {
-          // Ignore
-        }
-      }
-
-      isDirty = true;
-      updateTitle();
-      const state = getPaneState();
-      if (state.preview) updatePreviewImmediate(latest.content);
-      if (state.diff) updateDiff(latest.content, originalContent);
-    }
-
-    // Clean up all orphaned files
-    if (autosaves) {
-      for (const backup of autosaves) {
-        if (backup._backupFile) {
-          await window.mdpad.removeOrphanedBackup(backup._backupFile);
-        }
-      }
-    }
-    if (sessions) {
-      // Sessions are cleaned via session:clear, but orphaned ones need explicit cleanup
-      // The main process already handles this in loadRecoverySessions
-    }
+    // Show the recovery modal (non-blocking, replaces confirm())
+    showRecoveryModal(allRecoveries, autosaves);
   } catch {
     // Ignore recovery errors
+  }
+}
+
+// Called from File menu → "Restore from Backup..."
+async function showRestoreFromBackupMenu() {
+  try {
+    const { allRecoveries, autosaves } = await gatherRecoveries();
+    if (allRecoveries.length === 0) {
+      showRecoveryModal([], null); // Show "no backups" message
+    } else {
+      showRecoveryModal(allRecoveries, autosaves);
+    }
+  } catch {
+    // Ignore
+  }
+}
+
+function showRecoveryModal(recoveries, autosaves) {
+  // Prevent duplicate
+  if (document.getElementById("recovery-overlay")) return;
+
+  const overlay = document.createElement("div");
+  overlay.id = "recovery-overlay";
+  overlay.style.cssText =
+    "position:fixed;top:0;left:0;right:0;bottom:0;" +
+    "background:rgba(0,0,0,0.4);z-index:9999;" +
+    "display:flex;align-items:flex-start;justify-content:center;padding-top:10vh;";
+
+  const modal = document.createElement("div");
+  modal.style.cssText =
+    "background:#ffffff;border:1px solid #d0d7de;border-radius:8px;" +
+    "padding:20px;width:480px;max-height:70vh;display:flex;flex-direction:column;" +
+    "box-shadow:0 8px 24px rgba(0,0,0,0.2);";
+
+  // Title
+  const titleEl = document.createElement("div");
+  titleEl.textContent = t("recovery.title");
+  titleEl.style.cssText = "font-size:16px;font-weight:700;margin-bottom:8px;color:#24292f;";
+  modal.appendChild(titleEl);
+
+  if (recoveries.length === 0) {
+    // No backups message
+    const noEl = document.createElement("div");
+    noEl.textContent = t("recovery.noBackups");
+    noEl.style.cssText = "font-size:14px;color:#57606a;padding:16px 0;";
+    modal.appendChild(noEl);
+
+    const closeBtn = document.createElement("button");
+    closeBtn.textContent = t("recovery.close");
+    closeBtn.style.cssText =
+      "padding:6px 16px;border:1px solid #d0d7de;border-radius:6px;" +
+      "background:#f6f8fa;cursor:pointer;font-size:13px;align-self:flex-end;";
+    closeBtn.onclick = () => { overlay.remove(); focus(); };
+    modal.appendChild(closeBtn);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    return;
+  }
+
+  // Description
+  const descEl = document.createElement("div");
+  descEl.textContent = t("recovery.description");
+  descEl.style.cssText = "font-size:13px;color:#57606a;margin-bottom:12px;";
+  modal.appendChild(descEl);
+
+  // List container
+  const listEl = document.createElement("div");
+  listEl.style.cssText =
+    "flex:1;overflow-y:auto;border:1px solid #d0d7de;border-radius:6px;" +
+    "margin-bottom:12px;";
+
+  let selectedIdx = 0;
+
+  function renderList() {
+    listEl.innerHTML = "";
+    recoveries.forEach((rec, i) => {
+      const item = document.createElement("div");
+      item.style.cssText =
+        "padding:10px 12px;cursor:pointer;border-bottom:1px solid #eaeef2;" +
+        "display:flex;flex-direction:column;gap:2px;" +
+        (i === selectedIdx ? "background:#ddf4ff;" : "background:#fff;");
+
+      const topRow = document.createElement("div");
+      topRow.style.cssText = "display:flex;align-items:center;gap:8px;";
+
+      const radio = document.createElement("span");
+      radio.textContent = i === selectedIdx ? "●" : "○";
+      radio.style.cssText = "color:#0969da;font-size:14px;flex-shrink:0;";
+      topRow.appendChild(radio);
+
+      const fileName = rec.filePath
+        ? rec.filePath.split(/[\\/]/).pop()
+        : t("recovery.untitled");
+      const nameEl = document.createElement("span");
+      nameEl.textContent = fileName;
+      nameEl.style.cssText = "font-weight:600;font-size:14px;color:#24292f;";
+      topRow.appendChild(nameEl);
+
+      item.appendChild(topRow);
+
+      const metaRow = document.createElement("div");
+      metaRow.style.cssText =
+        "font-size:12px;color:#57606a;margin-left:22px;display:flex;gap:12px;";
+
+      const sourceLabel =
+        rec.source === "autosave"
+          ? t("recovery.source_autosave")
+          : t("recovery.source_session");
+
+      const dateStr = rec.savedAt
+        ? new Date(rec.savedAt).toLocaleString()
+        : "-";
+
+      metaRow.innerHTML =
+        `<span>${sourceLabel}</span><span>${dateStr}</span>`;
+
+      // Content preview (first 80 chars)
+      if (rec.content) {
+        const preview = rec.content.replace(/\n/g, " ").substring(0, 80);
+        const previewEl = document.createElement("span");
+        previewEl.textContent = preview + (rec.content.length > 80 ? "..." : "");
+        previewEl.style.cssText = "color:#8b949e;font-style:italic;";
+        metaRow.appendChild(previewEl);
+      }
+
+      item.appendChild(metaRow);
+
+      item.onclick = () => {
+        selectedIdx = i;
+        renderList();
+      };
+      item.ondblclick = () => {
+        selectedIdx = i;
+        doRestore();
+      };
+
+      listEl.appendChild(item);
+    });
+  }
+
+  renderList();
+  modal.appendChild(listEl);
+
+  // Buttons row
+  const btnRow = document.createElement("div");
+  btnRow.style.cssText = "display:flex;gap:8px;justify-content:flex-end;";
+
+  const ignoreBtn = document.createElement("button");
+  ignoreBtn.textContent = t("recovery.ignoreAll");
+  ignoreBtn.style.cssText =
+    "padding:6px 16px;border:1px solid #d0d7de;border-radius:6px;" +
+    "background:#f6f8fa;cursor:pointer;font-size:13px;color:#57606a;";
+  ignoreBtn.onclick = async () => {
+    await cleanupOrphans(autosaves);
+    overlay.remove();
+    focus();
+  };
+
+  const closeBtn = document.createElement("button");
+  closeBtn.textContent = t("recovery.close");
+  closeBtn.style.cssText =
+    "padding:6px 16px;border:1px solid #d0d7de;border-radius:6px;" +
+    "background:#f6f8fa;cursor:pointer;font-size:13px;";
+  closeBtn.onclick = () => { overlay.remove(); focus(); };
+
+  const restoreBtn = document.createElement("button");
+  restoreBtn.textContent = t("recovery.restore");
+  restoreBtn.style.cssText =
+    "padding:6px 16px;border:none;border-radius:6px;" +
+    "background:#2da44e;color:#fff;cursor:pointer;font-size:13px;font-weight:600;";
+  restoreBtn.onclick = () => doRestore();
+
+  btnRow.appendChild(ignoreBtn);
+  btnRow.appendChild(closeBtn);
+  btnRow.appendChild(restoreBtn);
+  modal.appendChild(btnRow);
+
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+
+  // Keyboard support
+  overlay.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      overlay.remove();
+      focus();
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      doRestore();
+    } else if (e.key === "ArrowDown" && selectedIdx < recoveries.length - 1) {
+      selectedIdx++;
+      renderList();
+    } else if (e.key === "ArrowUp" && selectedIdx > 0) {
+      selectedIdx--;
+      renderList();
+    }
+  });
+
+  // Focus the overlay for keyboard
+  overlay.tabIndex = -1;
+  overlay.focus();
+
+  async function doRestore() {
+    const selected = recoveries[selectedIdx];
+    if (!selected || !selected.content) return;
+
+    // If current document is dirty, ask for confirmation
+    if (isDirty) {
+      const confirmed = await showConfirmReplaceDialog();
+      if (!confirmed) return;
+    }
+
+    // Perform restore
+    await performRestore(selected);
+
+    // Cleanup orphans
+    await cleanupOrphans(autosaves);
+
+    overlay.remove();
+    focus();
+  }
+}
+
+function showConfirmReplaceDialog() {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.style.cssText =
+      "position:fixed;top:0;left:0;right:0;bottom:0;" +
+      "background:rgba(0,0,0,0.3);z-index:10000;" +
+      "display:flex;align-items:center;justify-content:center;";
+
+    const dialog = document.createElement("div");
+    dialog.style.cssText =
+      "background:#fff;border:1px solid #d0d7de;border-radius:8px;" +
+      "padding:20px;width:360px;box-shadow:0 8px 24px rgba(0,0,0,0.15);";
+
+    const msg = document.createElement("div");
+    msg.textContent = t("recovery.confirmReplace");
+    msg.style.cssText = "font-size:14px;color:#24292f;margin-bottom:16px;line-height:1.5;";
+    dialog.appendChild(msg);
+
+    const btnRow = document.createElement("div");
+    btnRow.style.cssText = "display:flex;gap:8px;justify-content:flex-end;";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.textContent = t("recovery.confirmCancel");
+    cancelBtn.style.cssText =
+      "padding:6px 16px;border:1px solid #d0d7de;border-radius:6px;" +
+      "background:#f6f8fa;cursor:pointer;font-size:13px;";
+    cancelBtn.onclick = () => { overlay.remove(); resolve(false); };
+
+    const discardBtn = document.createElement("button");
+    discardBtn.textContent = t("recovery.confirmDiscard");
+    discardBtn.style.cssText =
+      "padding:6px 16px;border:none;border-radius:6px;" +
+      "background:#cf222e;color:#fff;cursor:pointer;font-size:13px;font-weight:600;";
+    discardBtn.onclick = () => { overlay.remove(); resolve(true); };
+
+    btnRow.appendChild(cancelBtn);
+    btnRow.appendChild(discardBtn);
+    dialog.appendChild(btnRow);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+
+    overlay.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { overlay.remove(); resolve(false); }
+    });
+    overlay.tabIndex = -1;
+    overlay.focus();
+  });
+}
+
+async function performRestore(rec) {
+  if (rec.filePath) {
+    currentFilePath = rec.filePath;
+  } else {
+    currentFilePath = null;
+  }
+
+  setContent(rec.content);
+
+  // Restore originalContent for diff
+  if (rec.source === "autosave" && rec.originalContent) {
+    originalContent = rec.originalContent;
+    setOriginalContent(rec.originalContent);
+  } else if (rec.filePath) {
+    try {
+      const orig = await window.mdpad.openFileByPath(rec.filePath);
+      if (orig) {
+        originalContent = orig.content;
+        setOriginalContent(orig.content);
+      }
+    } catch {
+      // Ignore
+    }
+  } else {
+    originalContent = "";
+    setOriginalContent("");
+  }
+
+  isDirty = true;
+  updateTitle();
+
+  const state = getPaneState();
+  if (state.preview) updatePreviewImmediate(rec.content);
+  if (state.diff) updateDiff(rec.content, originalContent);
+
+  // Re-trigger global search if active, to fix search after recovery
+  triggerGlobalSearchUpdate();
+}
+
+async function cleanupOrphans(autosaves) {
+  if (autosaves) {
+    for (const backup of autosaves) {
+      if (backup._backupFile) {
+        try { await window.mdpad.removeOrphanedBackup(backup._backupFile); } catch {}
+      }
+    }
   }
 }
 

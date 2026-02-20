@@ -64,6 +64,10 @@ function createMenu(mainWindow) {
           label: t("menu.file_autosave"),
           submenu: autosaveSubmenu,
         },
+        {
+          label: t("menu.file_restoreBackup"),
+          click: () => mainWindow.webContents.send("menu:action", "restoreBackup"),
+        },
         { type: "separator" },
         {
           label: t("menu.file_exit"),
