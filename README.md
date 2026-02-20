@@ -1,5 +1,5 @@
+➡[Japanese 🇯🇵](./README.ja.md).
 # mdpad
-
 A GitHub-flavored Markdown editor built as a Windows standalone desktop application. Edit, preview, and diff your Markdown files with a clean, multi-pane interface.
 
 ![mdpad Editor and Preview](docs/resources/02_edit_preview_en.png)
