@@ -65,7 +65,7 @@ function resolveExePath() {
   const arg = process.argv[2];
   if (arg) return path.resolve(arg);
 
-  const candidates = ["build13", "build12", "build11", "build10", "build9", "build8", "build7", "build6", "build5", "build4", "build3", "build2", "build"].map(
+  const candidates = ["build14", "build13", "build12", "build11", "build10", "build9", "build8", "build7", "build6", "build5", "build4", "build3", "build2", "build"].map(
     (d) => path.join(__dirname, "..", d, "win-unpacked", "mdpad.exe")
   );
   for (const p of candidates) {

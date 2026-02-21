@@ -3,7 +3,7 @@ productName: mdpad
 copyright: "(C) pumpCurry, 5r4ce2"
 
 directories:
-  output: build13
+  output: build14
 
 files:
   - src/**/*
@@ -21,7 +21,7 @@ win:
     - target: dir
       arch:
         - x64
-  icon: assets/icons/icon.png
+  icon: assets/icons/icon.ico
 
 portable:
   artifactName: "mdpad-${version}-portable.exe"
