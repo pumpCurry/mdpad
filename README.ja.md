@@ -1,3 +1,5 @@
+➡[English README is Here](/README.md).
+
 <p align="center">
   <img src="docs/resources/mdpad_icon.png" alt="mdpad icon" width="128" height="128">
 </p>
