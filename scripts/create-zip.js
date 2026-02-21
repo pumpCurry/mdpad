@@ -10,13 +10,22 @@ const path = require("path");
 const fs = require("fs");
 const pkg = require("../package.json");
 
+// Read build number
+let buildNumber = 1;
+try {
+  const buildData = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "build-number.json"), "utf-8"));
+  buildNumber = buildData.build || 1;
+} catch {}
+const [major, minor] = pkg.version.split(".");
+const versionTag = `v${major}.${minor}.${String(buildNumber).padStart(5, "0")}`;
+
 // Auto-detect build output directory (newest first)
-const buildCandidates = ["build6", "build5", "build4", "build3", "build2", "build"].map(
+const buildCandidates = ["build16", "build15", "build14", "build13", "build12", "build11", "build10", "build9", "build8", "build7", "build6", "build5", "build4", "build3", "build2", "build"].map(
   (d) => path.join(__dirname, "..", d, "win-unpacked")
 );
 const buildDir = buildCandidates.find((d) => fs.existsSync(d)) || buildCandidates[buildCandidates.length - 1];
 const outputDir = path.dirname(buildDir);
-const zipName = `mdpad-v${pkg.version}-win-x64-portable.zip`;
+const zipName = `mdpad-${versionTag}-win-x64-portable.zip`;
 const zipPath = path.join(outputDir, zipName);
 
 if (!fs.existsSync(buildDir)) {
