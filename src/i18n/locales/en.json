@@ -23,6 +23,10 @@
     "edit_redo": "Redo",
     "edit_find": "Find...",
     "edit_replace": "Replace...",
+    "edit_cut": "Cut",
+    "edit_copy": "Copy",
+    "edit_paste": "Paste",
+    "edit_selectAll": "Select All",
     "edit_goToLine": "Go to Line...",
     "view": "View",
     "view_toggleEditor": "Toggle Editor Pane",
@@ -81,7 +85,9 @@
     "lines": "lines",
     "selected": "selected",
     "encoding": "UTF-8",
-    "filetype": "Markdown"
+    "filetype": "Markdown",
+    "backupOff": "Backup: OFF",
+    "backupNext": "Backup: {remaining}"
   },
   "search": {
     "find": "Find",

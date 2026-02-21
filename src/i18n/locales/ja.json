@@ -23,6 +23,10 @@
     "edit_redo": "やり直し",
     "edit_find": "検索...",
     "edit_replace": "置換...",
+    "edit_cut": "切り取り",
+    "edit_copy": "コピー",
+    "edit_paste": "貼り付け",
+    "edit_selectAll": "すべて選択",
     "edit_goToLine": "行にジャンプ...",
     "view": "表示",
     "view_toggleEditor": "エディタペインの切替",
@@ -81,7 +85,9 @@
     "lines": "行",
     "selected": "選択中",
     "encoding": "UTF-8",
-    "filetype": "Markdown"
+    "filetype": "Markdown",
+    "backupOff": "バックアップ: OFF",
+    "backupNext": "バックアップ: {remaining}"
   },
   "search": {
     "find": "検索",

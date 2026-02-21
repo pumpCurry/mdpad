@@ -38,6 +38,7 @@ const SESSION_SAVE_INTERVAL = 5000;
 // Autosave (backup) state
 let autosaveMinutes = 0; // 0 = OFF
 let autosaveTimer = null;
+let autosaveNextAt = 0; // timestamp (ms) of next autosave, 0 = not scheduled
 
 // Initialize components
 async function init() {
@@ -895,15 +896,25 @@ function startAutosaveTimer() {
     autosaveTimer = null;
   }
 
+  autosaveNextAt = 0;
+
   if (autosaveMinutes <= 0) return; // OFF
 
   const intervalMs = autosaveMinutes * 60 * 1000;
+  autosaveNextAt = Date.now() + intervalMs;
   autosaveTimer = setInterval(() => {
     if (isDirty) {
       performAutosaveBackup();
     }
+    // Reset next-at for the next cycle
+    autosaveNextAt = Date.now() + intervalMs;
   }, intervalMs);
 }
+
+/** Get autosave info for status bar display (exposed via window). */
+window.__mdpadGetAutosaveInfo = function() {
+  return { minutes: autosaveMinutes, nextAt: autosaveNextAt };
+};
 
 function performAutosaveBackup() {
   try {
