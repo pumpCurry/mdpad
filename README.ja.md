@@ -1,6 +1,10 @@
-# mdpad
+<p align="center">
+  <img src="docs/resources/mdpad_icon.png" alt="mdpad icon" width="128" height="128">
+</p>
 
-GitHub準拠 Markdown エディタ - Windows スタンドアロンデスクトップアプリケーション
+<h1 align="center">mdpad</h1>
+
+<p align="center">GitHub準拠 Markdown エディタ - Windows スタンドアロンデスクトップアプリケーション</p>
 
 Electron と CodeMirror 6 で構築された、ライブプレビューと差分表示機能を備えた高機能 Markdown エディタです。
 
@@ -25,10 +29,12 @@ Electron と CodeMirror 6 で構築された、ライブプレビューと差分
 - **ペイン横断検索** - エディタ・プレビュー・差分を横断して検索。マッチ数表示対応
 - **ドラッグ＆ドロップ** - ファイルをウィンドウにドロップして開く
 - **自動バックアップ** - 設定可能な自動保存タイマー（1〜60分またはOFF）
+  - ステータスバーに次回バックアップまでのカウントダウン表示
   - クラッシュリカバリ機能（差分表示用にオリジナルの内容を保持）
   - マルチインスタンス対応（PIDベース）
+- **ズーム** - Ctrl+/- でズーム、ステータスバーに倍率表示
+- **HTMLダイアログ** - 保存確認ダイアログ、リジューム保存対応の終了ダイアログ
 - **多言語対応（i18n）** - 日本語 / 英語、OSロケール自動検出
-- **閉じる保護** - コンテキストに応じた選択肢を持つ保存確認ダイアログ
 
 ## インストール
 
@@ -98,7 +104,7 @@ npm run build
 npm run build:zip
 ```
 
-`build/mdpad-v1.0.0-win-x64-portable.zip` が生成されます。
+`build/mdpad-vX.X.XXXXX-win-x64-portable.zip` が生成されます。
 
 ## 技術スタック
 

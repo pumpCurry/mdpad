@@ -1,6 +1,12 @@
 ➡[Japanese 🇯🇵 日本語はこちら](./README.ja.md).
-# mdpad
-A GitHub-flavored Markdown editor built as a Windows standalone desktop application. Edit, preview, and diff your Markdown files with a clean, multi-pane interface.
+
+<p align="center">
+  <img src="docs/resources/mdpad_icon.png" alt="mdpad icon" width="128" height="128">
+</p>
+
+<h1 align="center">mdpad</h1>
+
+<p align="center">A GitHub-flavored Markdown editor built as a Windows standalone desktop application.<br>Edit, preview, and diff your Markdown files with a clean, multi-pane interface.</p>
 
 ![mdpad Editor and Preview](docs/resources/02_edit_preview_en.png)
 
@@ -14,8 +20,10 @@ A GitHub-flavored Markdown editor built as a Windows standalone desktop applicat
 - **Search and replace** -- in-editor find with match count display
 - **Global search** -- cross-pane search across editor and preview
 - **Drag-and-drop** -- open files by dropping them onto the window
-- **Autosave backup** -- configurable timer with automatic backup
+- **Autosave backup** -- configurable timer with countdown display in status bar
 - **Crash recovery** -- restore your work after unexpected exits
+- **HTML dialogs** -- custom close and save confirmation dialogs with resume support
+- **Zoom control** -- zoom in/out with level displayed in status bar
 - **Internationalization** -- English and Japanese (en/ja)
 
 ## Installation

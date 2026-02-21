@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../resources/mdpad_icon.png" alt="mdpad" width="96" height="96">
+</p>
+
 # mdpad User Guide
 
 A comprehensive guide to **mdpad** -- a portable, GitHub-flavored Markdown editor with live preview, diff comparison, and crash recovery. Built with Electron and CodeMirror 6.
@@ -90,7 +94,7 @@ Key features at a glance:
 
 ### Portable ZIP (Recommended)
 
-1. Download the latest `mdpad-x.x.x-win.zip` from the releases page.
+1. Download the latest `mdpad-vX.X.XXXXX-win-x64-portable.zip` from the [releases page](https://github.com/pumpCurry/mdpad/releases).
 2. Extract the ZIP to any folder (e.g., `C:\Tools\mdpad\`).
 3. Double-click `mdpad.exe` to launch.
 
@@ -103,7 +107,7 @@ If you want to build mdpad yourself:
 1. Make sure you have [Node.js](https://nodejs.org/) (v18 or later) installed.
 2. Clone the repository and install dependencies:
    ```
-   git clone <repository-url>
+   git clone https://github.com/pumpCurry/mdpad.git
    cd mdpad
    npm install
    ```
@@ -120,7 +124,7 @@ If you want to build mdpad yourself:
    npm run build:zip
    ```
 
-The built application will be placed in the `dist/` folder.
+The built application will be placed in the `build/win-unpacked/` folder.
 
 ---
 
@@ -166,6 +170,8 @@ The status bar at the bottom displays:
 - **Cursor position** -- Current line and column (e.g., `Ln 42, Col 15`).
 - **Selection info** -- Number of selected characters, shown when text is selected.
 - **Total lines** -- The total line count of the document.
+- **Backup countdown** -- Time remaining until next auto backup (e.g., `Backup: 4m 30s`), or `Backup: OFF` when disabled.
+- **Zoom level** -- Current zoom percentage (e.g., `100%`).
 - **Encoding** -- Always `UTF-8`.
 - **File type** -- Always `Markdown`.
 
@@ -194,18 +200,15 @@ Opens a file dialog where you can select a Markdown file (`.md`, `.markdown`, `.
 
 ### Close and Save Confirmation
 
-When you close the window while the document has unsaved changes, mdpad shows a confirmation dialog:
+When you close the window while the document has unsaved changes, mdpad shows an HTML-based confirmation dialog with three options:
 
-- **For an existing file (previously saved):**
-  - `Save (overwrite)` -- Saves to the current file path and closes.
-  - `Save As...` -- Opens a Save As dialog, then closes.
-  - `Exit without saving` -- Discards changes and closes.
+| Button | Action |
+|--------|--------|
+| **Exit without saving** | Discards changes and closes. |
+| **Save for resume & exit** | Saves session data for recovery on next launch, then closes. |
+| **Save As** | Opens a Save As dialog, then closes. |
 
-- **For a new file (never saved):**
-  - `Save` -- Opens a Save As dialog, then closes.
-  - `Exit without saving` -- Discards changes and closes.
-
-Pressing Escape or dismissing the dialog keeps the window open.
+Pressing Escape or clicking outside the dialog keeps the window open.
 
 ---
 
@@ -481,9 +484,9 @@ Both session files and backup files are tagged with the process ID. When mdpad s
 
 ### Recovery Dialog
 
-If orphaned session or backup files are detected on startup, mdpad displays a confirmation dialog asking whether you want to recover the unsaved content. The dialog shows the file name (or "Untitled" for new documents).
+If orphaned session or backup files are detected on startup, mdpad displays an HTML-based recovery modal showing the file name (or "Untitled" for new documents) and file path.
 
-- Click **OK** to restore the recovered content into the editor. The original content is also restored if available, so the Diff pane can show meaningful comparisons.
+- Click **Restore** to restore the recovered content into the editor. The original content is also restored if available, so the Diff pane can show meaningful comparisons. If the backup content is empty but the file path is known, mdpad will attempt to read the file from disk.
 - Click **Cancel** to discard the recovery data and start fresh.
 
 After recovery (whether accepted or declined), the orphaned files are cleaned up automatically.
