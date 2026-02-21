@@ -147,7 +147,22 @@
     sans-serif;
   font-size: 16px;
   line-height: 1.6;
-  white-space: pre-wrap;
+}
+
+/* Ensure tables/code inside diff blocks inherit diff background */
+.md-diff-added table,
+.md-diff-removed table,
+.md-diff-added table th,
+.md-diff-added table td,
+.md-diff-removed table th,
+.md-diff-removed table td {
+  background: inherit;
+}
+
+/* Avoid double border-left on pre/code inside diff blocks */
+.md-diff-added pre,
+.md-diff-removed pre {
+  border-left: none;
 }
 
 .md-diff-empty {

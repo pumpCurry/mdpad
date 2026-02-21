@@ -2,35 +2,150 @@
  * Markdown-level rich diff: renders the diff as a GitHub-style
  * rich diff preview where added/removed content is shown inline
  * in the rendered Markdown with green/red highlights.
+ *
+ * Uses block-level diffing to preserve multi-line structures
+ * (tables, fenced code blocks, Mermaid diagrams, lists, etc.)
  */
-import { diffLines, diffWords } from "diff";
+import { diffArrays } from "diff";
 import { renderMarkdown } from "./markdown-engine.js";
 
 /**
+ * Split a Markdown string into an array of self-contained block strings.
+ *
+ * Block boundaries:
+ * - Fenced code blocks (``` or ~~~, including mermaid): opening → closing = 1 block
+ * - Table rows: contiguous lines starting with | = 1 block
+ * - Block quotes: contiguous lines starting with > = 1 block
+ * - Lists: contiguous lines starting with - / * / + / 1. (incl. indented continuation) = 1 block
+ * - Paragraphs: separated by blank lines = 1 block each
+ */
+function splitIntoBlocks(text) {
+  const lines = text.split("\n");
+  const blocks = [];
+  let current = [];
+  let inFence = false;
+  let fenceChar = "";
+  let fenceLen = 0;
+
+  function flush() {
+    if (current.length > 0) {
+      blocks.push(current.join("\n"));
+      current = [];
+    }
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // --- Fenced code blocks ---
+    if (!inFence) {
+      const fenceMatch = line.match(/^(`{3,}|~{3,})/);
+      if (fenceMatch) {
+        flush();
+        inFence = true;
+        fenceChar = fenceMatch[1][0];
+        fenceLen = fenceMatch[1].length;
+        current.push(line);
+        continue;
+      }
+    } else {
+      current.push(line);
+      // Check for closing fence: same char, at least same length, only whitespace after
+      const closeRegex = new RegExp(
+        "^" + (fenceChar === "`" ? "`" : "~") + "{" + fenceLen + ",}\\s*$"
+      );
+      if (closeRegex.test(line)) {
+        inFence = false;
+        fenceChar = "";
+        fenceLen = 0;
+        flush();
+      }
+      continue;
+    }
+
+    // --- Blank line = block boundary ---
+    if (line.trim() === "") {
+      flush();
+      continue;
+    }
+
+    // --- Classify line type ---
+    const isTableRow = /^\|/.test(line);
+    const isBlockQuote = /^>/.test(line);
+    const isListItem = /^(\s*[-*+]|\s*\d+[.)]\s)/.test(line);
+    const isIndented = /^\s+\S/.test(line); // indented continuation
+
+    if (current.length > 0) {
+      const prevLine = current[current.length - 1];
+      const prevIsTable = /^\|/.test(prevLine);
+      const prevIsBlockQuote = /^>/.test(prevLine);
+      const prevIsList = /^(\s*[-*+]|\s*\d+[.)]\s)/.test(prevLine) ||
+                         (/^\s+\S/.test(prevLine) && current.length >= 2);
+
+      // Keep table rows together
+      if (isTableRow && prevIsTable) {
+        current.push(line);
+        continue;
+      }
+      // Keep block quote lines together
+      if (isBlockQuote && prevIsBlockQuote) {
+        current.push(line);
+        continue;
+      }
+      // Keep list items together (including indented continuations)
+      if (prevIsList && (isListItem || isIndented)) {
+        current.push(line);
+        continue;
+      }
+      // If type changes, flush and start new block
+      if (
+        (isTableRow && !prevIsTable) ||
+        (isBlockQuote && !prevIsBlockQuote) ||
+        (prevIsTable && !isTableRow) ||
+        (prevIsBlockQuote && !isBlockQuote)
+      ) {
+        flush();
+        current.push(line);
+        continue;
+      }
+    }
+
+    current.push(line);
+  }
+
+  // Flush remaining (including unclosed fences)
+  flush();
+
+  return blocks;
+}
+
+/**
  * Generate a rich Markdown diff HTML.
- * Approach: compute line-level diff, then render each chunk
- * with appropriate CSS classes wrapping the rendered markdown.
+ * Uses block-level diffing: splits both texts into semantic blocks,
+ * diffs at block level, then renders each complete block.
  */
 export function renderMarkdownDiff(oldText, newText) {
   if (oldText === newText) {
     return '<div class="md-diff-empty">No changes</div>';
   }
 
-  const lineDiffs = diffLines(oldText, newText);
-  let html = '';
+  const oldBlocks = splitIntoBlocks(oldText);
+  const newBlocks = splitIntoBlocks(newText);
+  const blockDiffs = diffArrays(oldBlocks, newBlocks);
 
-  for (const part of lineDiffs) {
-    const text = part.value;
-    if (!text.trim() && !text.includes('\n')) continue;
+  let html = "";
 
-    const rendered = renderMarkdown(text);
+  for (const part of blockDiffs) {
+    for (const block of part.value) {
+      const rendered = renderMarkdown(block);
 
-    if (part.added) {
-      html += `<div class="md-diff-added">${rendered}</div>`;
-    } else if (part.removed) {
-      html += `<div class="md-diff-removed">${rendered}</div>`;
-    } else {
-      html += `<div class="md-diff-unchanged">${rendered}</div>`;
+      if (part.added) {
+        html += `<div class="md-diff-added">${rendered}</div>`;
+      } else if (part.removed) {
+        html += `<div class="md-diff-removed">${rendered}</div>`;
+      } else {
+        html += `<div class="md-diff-unchanged">${rendered}</div>`;
+      }
     }
   }
 
@@ -38,67 +153,57 @@ export function renderMarkdownDiff(oldText, newText) {
 }
 
 /**
- * Generate a word-level inline rich diff for smaller documents.
- * Shows the old (deleted) words with strikethrough/red and
- * new (added) words with green highlight, all within rendered context.
- *
- * This approach merges old and new text with diff markers,
- * then renders the combined Markdown.
+ * Generate a word-level inline rich diff.
+ * Uses block-level diffing, then for replacement pairs (removed→added),
+ * interleaves removed/added blocks for visual comparison.
  */
 export function renderMarkdownDiffInline(oldText, newText) {
   if (oldText === newText) {
     return '<div class="md-diff-empty">No changes</div>';
   }
 
-  // Line-by-line diff, then word-level within changed lines
-  const lineDiffs = diffLines(oldText, newText);
-  let mergedLines = [];
+  const oldBlocks = splitIntoBlocks(oldText);
+  const newBlocks = splitIntoBlocks(newText);
+  const blockDiffs = diffArrays(oldBlocks, newBlocks);
 
-  for (let i = 0; i < lineDiffs.length; i++) {
-    const part = lineDiffs[i];
+  let html = "";
+
+  for (let i = 0; i < blockDiffs.length; i++) {
+    const part = blockDiffs[i];
 
     if (!part.added && !part.removed) {
-      // Unchanged lines pass through
-      mergedLines.push(part.value);
+      // Unchanged blocks
+      for (const block of part.value) {
+        html += `<div class="md-diff-unchanged">${renderMarkdown(block)}</div>`;
+      }
     } else if (part.removed) {
-      // Check if next part is added (a replacement)
-      const next = lineDiffs[i + 1];
+      // Check if next part is added (replacement pair)
+      const next = blockDiffs[i + 1];
       if (next && next.added) {
-        // Word-level diff between removed and added
-        const wordDiffs = diffWords(part.value, next.value);
-        let merged = '';
-        for (const w of wordDiffs) {
-          if (w.removed) {
-            merged += `<span class="md-diff-word-removed">${escapeHtml(w.value)}</span>`;
-          } else if (w.added) {
-            merged += `<span class="md-diff-word-added">${escapeHtml(w.value)}</span>`;
-          } else {
-            merged += escapeHtml(w.value);
+        // Interleave removed/added blocks
+        const maxLen = Math.max(part.value.length, next.value.length);
+        for (let j = 0; j < maxLen; j++) {
+          if (j < part.value.length) {
+            html += `<div class="md-diff-removed">${renderMarkdown(part.value[j])}</div>`;
+          }
+          if (j < next.value.length) {
+            html += `<div class="md-diff-added">${renderMarkdown(next.value[j])}</div>`;
           }
         }
-        mergedLines.push(merged);
-        i++; // skip the next (added) part
+        i++; // skip the added part
       } else {
         // Pure deletion
-        mergedLines.push(`<span class="md-diff-word-removed">${escapeHtml(part.value)}</span>`);
+        for (const block of part.value) {
+          html += `<div class="md-diff-removed">${renderMarkdown(block)}</div>`;
+        }
       }
     } else if (part.added) {
       // Pure addition (no preceding removal)
-      mergedLines.push(`<span class="md-diff-word-added">${escapeHtml(part.value)}</span>`);
+      for (const block of part.value) {
+        html += `<div class="md-diff-added">${renderMarkdown(block)}</div>`;
+      }
     }
   }
 
-  // The merged result contains HTML spans mixed with raw text.
-  // We render it as HTML directly (not through markdown-it, since we already have markers)
-  const combined = mergedLines.join('');
-  return `<div class="md-diff-inline-view">${combined}</div>`;
-}
-
-function escapeHtml(text) {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/\n/g, '<br>');
+  return `<div class="md-diff-inline-view">${html}</div>`;
 }
