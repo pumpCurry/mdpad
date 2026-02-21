@@ -1,3 +1,5 @@
+➡[English README is Here](/README.md).
+
 # mdpad
 
 GitHub準拠 Markdown エディタ - Windows スタンドアロンデスクトップアプリケーション
