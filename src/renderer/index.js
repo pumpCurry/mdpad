@@ -1130,7 +1130,22 @@ function showRecoveryModal(recoveries, autosaves) {
 
   async function doRestore() {
     const selected = recoveries[selectedIdx];
-    if (!selected || !selected.content) return;
+    if (!selected) return;
+
+    // If content is empty but we have a filePath, try reading from the file
+    if (!selected.content && selected.filePath) {
+      try {
+        const fileData = await window.mdpad.openFileByPath(selected.filePath);
+        if (fileData && fileData.content) {
+          selected.content = fileData.content;
+        }
+      } catch {
+        // File might not exist anymore
+      }
+    }
+
+    // Still no content — nothing to restore
+    if (selected.content == null) return;
 
     // If current document is dirty, ask for confirmation
     if (isDirty) {
