@@ -1,9 +1,10 @@
 {
   "app": {
     "name": "mdpad",
-    "version": "mdpad v1.0.0",
     "description": "GitHub-flavored Markdown Editor",
-    "untitled": "Untitled"
+    "untitled": "Untitled",
+    "support": "Support",
+    "devSite": "Developer"
   },
   "menu": {
     "file": "File",
@@ -35,7 +36,7 @@
     "view_devTools": "Toggle Developer Tools",
     "view_language": "Language",
     "help": "Help",
-    "help_about": "About mdpad"
+    "help_about": "About mdpad..."
   },
   "dialog": {
     "filterMarkdown": "Markdown",

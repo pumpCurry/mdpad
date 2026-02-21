@@ -3,12 +3,13 @@ productName: mdpad
 copyright: "(C) pumpCurry, 5r4ce2"
 
 directories:
-  output: build12
+  output: build13
 
 files:
   - src/**/*
   - dist/**/*
   - package.json
+  - build-number.json
   - "!**/*.map"
   - "!**/node_modules/**"
 

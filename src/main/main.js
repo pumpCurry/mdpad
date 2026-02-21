@@ -292,6 +292,26 @@ function createWindow(openFilePath) {
       }
     });
 
+    // IPC: get app version info for About dialog
+    ipcMain.handle("app:getVersionInfo", () => {
+      const pkg = require("../../package.json");
+      let buildNumber = 1;
+      try {
+        const buildFile = path.join(__dirname, "..", "..", "build-number.json");
+        const buildData = JSON.parse(fs.readFileSync(buildFile, "utf-8"));
+        buildNumber = buildData.build || 1;
+      } catch {
+        // build-number.json not found — use default
+      }
+      const [major, minor] = pkg.version.split(".");
+      return {
+        major: parseInt(major, 10),
+        minor: parseInt(minor, 10),
+        build: buildNumber,
+        version: `v${major}.${minor}.${String(buildNumber).padStart(5, "0")}`,
+      };
+    });
+
     ipcRegistered = true;
   }
 

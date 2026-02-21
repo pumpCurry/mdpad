@@ -51,4 +51,9 @@ const ghMdCss = path.join(
 );
 fs.copyFileSync(ghMdCss, path.join(distDir, "github-markdown.css"));
 
+// Copy app icon for About dialog
+const iconSrc = path.join(__dirname, "..", "assets", "icons", "icon.png");
+const iconDest = path.join(distDir, "icon.png");
+fs.copyFileSync(iconSrc, iconDest);
+
 console.log("Assets copied successfully.");

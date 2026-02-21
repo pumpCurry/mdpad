@@ -1,9 +1,10 @@
 {
   "app": {
     "name": "mdpad",
-    "version": "mdpad v1.0.0",
     "description": "GitHub準拠 Markdownエディタ",
-    "untitled": "無題"
+    "untitled": "無題",
+    "support": "サポート",
+    "devSite": "開発者サイト"
   },
   "menu": {
     "file": "ファイル",
@@ -35,7 +36,7 @@
     "view_devTools": "開発者ツールの切替",
     "view_language": "言語",
     "help": "ヘルプ",
-    "help_about": "mdpadについて"
+    "help_about": "mdpadについて..."
   },
   "dialog": {
     "filterMarkdown": "Markdown",

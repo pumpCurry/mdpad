@@ -18,6 +18,9 @@ contextBridge.exposeInMainWorld("mdpad", {
   // Zoom level (webFrame)
   getZoomLevel: () => webFrame.getZoomLevel(),
 
+  // App version info
+  getVersionInfo: () => ipcRenderer.invoke("app:getVersionInfo"),
+
   // i18n
   getLocale: () => ipcRenderer.invoke("i18n:getLocale"),
   getSupportedLocales: () => ipcRenderer.invoke("i18n:getSupportedLocales"),

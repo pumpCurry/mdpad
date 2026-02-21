@@ -420,42 +420,116 @@ function showGoToLineDialog() {
   });
 }
 
-function showAboutDialog() {
+async function showAboutDialog() {
   // Prevent duplicate
   if (document.getElementById("about-overlay")) return;
+
+  // Get version info from main process
+  let versionStr = "v1.1.00001";
+  try {
+    const info = await window.mdpad.getVersionInfo();
+    versionStr = info.version;
+  } catch {
+    // Fallback
+  }
 
   const overlay = document.createElement("div");
   overlay.id = "about-overlay";
   overlay.style.cssText =
     "position:fixed;top:0;left:0;right:0;bottom:0;" +
     "background:rgba(0,0,0,0.3);z-index:9999;" +
-    "display:flex;align-items:flex-start;justify-content:center;padding-top:20vh;";
+    "display:flex;align-items:flex-start;justify-content:center;padding-top:15vh;";
 
   const dialog = document.createElement("div");
   dialog.style.cssText =
-    "background:#ffffff;border:1px solid #d0d7de;border-radius:8px;" +
-    "padding:20px;width:320px;box-shadow:0 8px 24px rgba(0,0,0,0.15);text-align:center;";
+    "background:#ffffff;border:1px solid #d0d7de;border-radius:12px;" +
+    "padding:28px 32px;width:360px;box-shadow:0 12px 40px rgba(0,0,0,0.18);text-align:center;";
 
-  const titleEl = document.createElement("div");
-  titleEl.textContent = t("app.version");
-  titleEl.style.cssText = "font-size:16px;font-weight:700;color:#24292f;margin-bottom:8px;";
-  dialog.appendChild(titleEl);
+  // App icon
+  const iconEl = document.createElement("img");
+  iconEl.src = "../../dist/renderer/icon.png";
+  iconEl.alt = "mdpad";
+  iconEl.style.cssText =
+    "width:72px;height:72px;border-radius:14px;margin-bottom:12px;" +
+    "box-shadow:0 2px 8px rgba(0,0,0,0.12);";
+  iconEl.onerror = () => { iconEl.style.display = "none"; };
+  dialog.appendChild(iconEl);
 
+  // App name
+  const nameEl = document.createElement("div");
+  nameEl.textContent = "mdpad";
+  nameEl.style.cssText =
+    "font-size:22px;font-weight:700;color:#24292f;margin-bottom:2px;" +
+    "letter-spacing:0.5px;";
+  dialog.appendChild(nameEl);
+
+  // Version
+  const verEl = document.createElement("div");
+  verEl.textContent = versionStr;
+  verEl.style.cssText =
+    "font-size:13px;color:#8b949e;margin-bottom:10px;" +
+    "font-family:'SF Mono',Consolas,'Liberation Mono',Menlo,monospace;";
+  dialog.appendChild(verEl);
+
+  // Description
   const descEl = document.createElement("div");
   descEl.textContent = t("app.description");
-  descEl.style.cssText = "font-size:14px;color:#57606a;margin-bottom:8px;";
+  descEl.style.cssText = "font-size:14px;color:#57606a;margin-bottom:10px;line-height:1.4;";
   dialog.appendChild(descEl);
 
+  // Copyright
   const copyrightEl = document.createElement("div");
   copyrightEl.textContent = `(C) pumpCurry, 5r4ce2 ${new Date().getFullYear()}`;
-  copyrightEl.style.cssText = "font-size:13px;color:#8b949e;margin-bottom:16px;";
+  copyrightEl.style.cssText = "font-size:12px;color:#8b949e;margin-bottom:14px;";
   dialog.appendChild(copyrightEl);
 
+  // Links section
+  const linksEl = document.createElement("div");
+  linksEl.style.cssText =
+    "border-top:1px solid #d8dee4;padding-top:12px;margin-bottom:16px;" +
+    "display:flex;flex-direction:column;gap:6px;";
+
+  const supportLink = document.createElement("div");
+  supportLink.style.cssText = "font-size:12px;color:#57606a;display:flex;align-items:center;justify-content:center;gap:6px;";
+  const supportLabel = document.createElement("span");
+  supportLabel.textContent = t("app.support") + ":";
+  const supportA = document.createElement("a");
+  supportA.textContent = "github.com/pumpCurry/mdpad";
+  supportA.href = "#";
+  supportA.style.cssText = "color:#0969da;text-decoration:none;cursor:pointer;";
+  supportA.onclick = (e) => { e.preventDefault(); window.mdpad.openExternal("https://github.com/pumpCurry/mdpad"); };
+  supportA.onmouseover = () => { supportA.style.textDecoration = "underline"; };
+  supportA.onmouseout = () => { supportA.style.textDecoration = "none"; };
+  supportLink.appendChild(supportLabel);
+  supportLink.appendChild(supportA);
+  linksEl.appendChild(supportLink);
+
+  const devLink = document.createElement("div");
+  devLink.style.cssText = "font-size:12px;color:#57606a;display:flex;align-items:center;justify-content:center;gap:6px;";
+  const devLabel = document.createElement("span");
+  devLabel.textContent = t("app.devSite") + ":";
+  const devA = document.createElement("a");
+  devA.textContent = "542.jp";
+  devA.href = "#";
+  devA.style.cssText = "color:#0969da;text-decoration:none;cursor:pointer;";
+  devA.onclick = (e) => { e.preventDefault(); window.mdpad.openExternal("https://542.jp/"); };
+  devA.onmouseover = () => { devA.style.textDecoration = "underline"; };
+  devA.onmouseout = () => { devA.style.textDecoration = "none"; };
+  devLink.appendChild(devLabel);
+  devLink.appendChild(devA);
+  linksEl.appendChild(devLink);
+
+  dialog.appendChild(linksEl);
+
+  // OK button
   const closeBtn = document.createElement("button");
   closeBtn.textContent = "OK";
   closeBtn.style.cssText =
-    "padding:6px 24px;border:1px solid #d0d7de;border-radius:6px;" +
-    "background:#f6f8fa;cursor:pointer;font-size:13px;";
+    "padding:6px 32px;border:1px solid #d0d7de;border-radius:6px;" +
+    "background:#f6f8fa;cursor:pointer;font-size:13px;color:#24292f;" +
+    "transition:background 0.15s;";
+  closeBtn.onmouseover = () => { closeBtn.style.background = "#e8ebef"; };
+  closeBtn.onmouseout = () => { closeBtn.style.background = "#f6f8fa"; };
   closeBtn.onclick = () => { overlay.remove(); focus(); };
   dialog.appendChild(closeBtn);
 
