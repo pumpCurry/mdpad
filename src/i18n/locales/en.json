@@ -87,7 +87,11 @@
     "encoding": "UTF-8",
     "filetype": "Markdown",
     "backupOff": "Backup: OFF",
-    "backupNext": "Backup: {remaining}"
+    "backupNext": "Backup: {remaining}",
+    "gitRepo": "Repository",
+    "gitBranch": "Branch",
+    "gitCommit": "Commit",
+    "gitCommitCount": "Commits on branch"
   },
   "search": {
     "find": "Find",
@@ -134,7 +138,12 @@
     "openFile": "Open File...",
     "selectFile": "Select a file to compare",
     "mermaidError": "Mermaid Error:",
-    "noChanges": "No changes"
+    "noChanges": "No changes",
+    "vsGit": "vs. Git HEAD",
+    "loadingGit": "Loading git HEAD content...",
+    "gitNoFile": "Save the file first to compare with git",
+    "gitNoContent": "File not found in git HEAD",
+    "gitError": "Failed to load git HEAD content"
   },
   "recovery": {
     "title": "Document Recovery",

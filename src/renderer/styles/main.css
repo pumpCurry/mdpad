@@ -99,6 +99,41 @@ body {
   flex: 1;
 }
 
+/* ===== Git Status Bar Info ===== */
+#status-bar .sb-git-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border-left: 1px solid #d0d7de;
+  border-right: 1px solid #d0d7de;
+  height: 16px;
+  flex-shrink: 0;
+  font-size: 11px;
+}
+
+#status-bar .sb-git-repo {
+  color: #24292f;
+  font-weight: 600;
+}
+
+#status-bar .sb-git-branch {
+  color: #0969da;
+  font-family: "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 11px;
+}
+
+#status-bar .sb-git-hash {
+  color: #8b949e;
+  font-family: "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 11px;
+}
+
+#status-bar .sb-git-count {
+  color: #57606a;
+  font-size: 10px;
+}
+
 /* ===== DnD Insert Mode Toggle ===== */
 #global-search-bar .gs-dnd-toggle {
   display: flex;

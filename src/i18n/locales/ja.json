@@ -87,7 +87,11 @@
     "encoding": "UTF-8",
     "filetype": "Markdown",
     "backupOff": "バックアップ: OFF",
-    "backupNext": "バックアップ: {remaining}"
+    "backupNext": "バックアップ: {remaining}",
+    "gitRepo": "リポジトリ",
+    "gitBranch": "ブランチ",
+    "gitCommit": "コミット",
+    "gitCommitCount": "ブランチのコミット数"
   },
   "search": {
     "find": "検索",
@@ -134,7 +138,12 @@
     "openFile": "ファイルを開く...",
     "selectFile": "比較するファイルを選択してください",
     "mermaidError": "Mermaidエラー:",
-    "noChanges": "変更なし"
+    "noChanges": "変更なし",
+    "vsGit": "Git HEADと比較",
+    "loadingGit": "Git HEADの内容を読み込み中...",
+    "gitNoFile": "Gitと比較するにはファイルを保存してください",
+    "gitNoContent": "Git HEADにファイルが見つかりません",
+    "gitError": "Git HEADの内容の読み込みに失敗しました"
   },
   "recovery": {
     "title": "ドキュメントの回復",

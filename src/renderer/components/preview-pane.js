@@ -17,7 +17,9 @@ let currentSource = "";
 let originalSource = "";
 let diffFileContent = null;
 let diffFilePath = null;
-let diffSource = "history"; // "history" or "file"
+let diffSource = "history"; // "history", "file", or "git"
+let gitHeadContent = null; // cached HEAD content for git diff
+let gitAvailable = false; // whether the current file is in a tracked git repo
 
 // Base directory for resolving relative paths in preview (set by the editor)
 let baseDir = null;
@@ -55,6 +57,7 @@ function buildPreviewUI() {
       <select class="preview-diff-source">
         <option value="history" ${diffSource === "history" ? "selected" : ""}>${t("previewPane.vsOriginal")}</option>
         <option value="file" ${diffSource === "file" ? "selected" : ""}>${t("previewPane.vsFile")}</option>
+        ${gitAvailable ? `<option value="git" ${diffSource === "git" ? "selected" : ""}>${t("previewPane.vsGit")}</option>` : ""}
       </select>
       <button class="preview-diff-open-file" style="${diffSource === "file" ? "display:inline-block" : "display:none"}">${t("previewPane.openFile")}</button>
       <span class="preview-diff-file-name" style="${diffFilePath && diffSource === "file" ? "display:inline" : "display:none"}">${diffFilePath ? diffFilePath.split(/[\\/]/).pop() : ""}</span>
@@ -188,6 +191,28 @@ async function doRenderRichDiff() {
   let oldText;
   if (diffSource === "history") {
     oldText = originalSource;
+  } else if (diffSource === "git") {
+    if (gitHeadContent === null) {
+      body.innerHTML = `<div class="md-diff-empty">${t("previewPane.loadingGit")}</div>`;
+      try {
+        const currentPath = typeof window.__mdpadGetCurrentFilePath === "function"
+          ? window.__mdpadGetCurrentFilePath()
+          : null;
+        if (!currentPath) {
+          body.innerHTML = `<div class="md-diff-empty">${t("previewPane.gitNoFile")}</div>`;
+          return;
+        }
+        gitHeadContent = await window.mdpad.getGitFileContent(currentPath);
+        if (gitHeadContent === null) {
+          body.innerHTML = `<div class="md-diff-empty">${t("previewPane.gitNoContent")}</div>`;
+          return;
+        }
+      } catch {
+        body.innerHTML = `<div class="md-diff-empty">${t("previewPane.gitError")}</div>`;
+        return;
+      }
+    }
+    oldText = gitHeadContent;
   } else {
     if (!diffFileContent) {
       body.innerHTML = `<div class="md-diff-empty">${t("previewPane.selectFile")}</div>`;
@@ -288,6 +313,21 @@ async function renderMermaidBlocks(container) {
       pre.replaceWith(div);
     }
   }
+}
+
+export function setGitAvailable(available) {
+  const wasAvailable = gitAvailable;
+  gitAvailable = available;
+  if (!available && diffSource === "git") {
+    diffSource = "history";
+  }
+  if (wasAvailable !== available) {
+    buildPreviewUI();
+  }
+}
+
+export function clearGitHeadCache() {
+  gitHeadContent = null;
 }
 
 export function getPreviewElement() {

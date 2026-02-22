@@ -12,6 +12,11 @@ contextBridge.exposeInMainWorld("mdpad", {
   // Diff
   openDiffFile: () => ipcRenderer.invoke("diff:openFile"),
 
+  // Git
+  getGitInfo: (filePath) => ipcRenderer.invoke("git:getInfo", filePath),
+  getGitFileContent: (filePath) => ipcRenderer.invoke("git:getFileContent", filePath),
+  invalidateGitCache: (filePath) => ipcRenderer.invoke("git:invalidateCache", filePath),
+
   // Window
   setTitle: (title) => ipcRenderer.invoke("window:setTitle", title),
 

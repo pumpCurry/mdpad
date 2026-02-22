@@ -11,7 +11,7 @@ import {
   goToLine,
   getCursorInfo,
 } from "./components/editor-pane.js";
-import { initPreview, updatePreview, updatePreviewImmediate, setOriginalContent, setPreviewBaseDir } from "./components/preview-pane.js";
+import { initPreview, updatePreview, updatePreviewImmediate, setOriginalContent, setPreviewBaseDir, setGitAvailable, clearGitHeadCache } from "./components/preview-pane.js";
 import { initDiff, updateDiff } from "./components/diff-pane.js";
 import {
   initPaneManager,
@@ -21,7 +21,7 @@ import {
   onPaneChange,
 } from "./components/pane-manager.js";
 import { initToolbar, updateButtonStates } from "./components/toolbar.js";
-import { initStatusBar, updateStatusBar } from "./components/status-bar.js";
+import { initStatusBar, updateStatusBar, setGitInfo } from "./components/status-bar.js";
 import { initGlobalSearch, triggerGlobalSearchUpdate, isDndInsertMode } from "./components/global-search.js";
 import { syncEditorToPreview } from "./lib/scroll-sync.js";
 import { initI18n, t, setLocale, onLocaleChange } from "../i18n/i18n-renderer.js";
@@ -128,6 +128,9 @@ async function init() {
 
   // Expose content getter for main process save-on-close
   window.__mdpadGetContent = () => getContent();
+
+  // Expose currentFilePath getter for preview-pane git diff
+  window.__mdpadGetCurrentFilePath = () => currentFilePath;
 
   // Expose editor view for smoke tests
   window.__mdpadEditor = () => getEditor();
@@ -661,6 +664,27 @@ function showConfirmSaveDialog() {
   });
 }
 
+/**
+ * Fetch git info for the current file and update UI components.
+ */
+async function refreshGitInfo() {
+  if (!currentFilePath) {
+    setGitInfo(null);
+    setGitAvailable(false);
+    clearGitHeadCache();
+    return;
+  }
+  try {
+    const info = await window.mdpad.getGitInfo(currentFilePath);
+    setGitInfo(info);
+    setGitAvailable(!!info && info.isTracked);
+    clearGitHeadCache();
+  } catch {
+    setGitInfo(null);
+    setGitAvailable(false);
+  }
+}
+
 async function newFile() {
   if (isDirty) {
     const result = await showConfirmSaveDialog();
@@ -685,6 +709,7 @@ async function newFile() {
   const state = getPaneState();
   if (state.preview) updatePreviewImmediate("");
   if (state.diff) updateDiff("", "");
+  refreshGitInfo();
 }
 
 async function openFile() {
@@ -714,6 +739,7 @@ async function openFile() {
   const state = getPaneState();
   if (state.preview) updatePreviewImmediate(result.content);
   if (state.diff) updateDiff(result.content, originalContent);
+  refreshGitInfo();
 }
 
 async function saveFile() {
@@ -728,6 +754,8 @@ async function saveFile() {
   updateTitle();
   await window.mdpad.clearSession();
   await window.mdpad.clearAutosaveBackup();
+  await window.mdpad.invalidateGitCache(currentFilePath);
+  refreshGitInfo();
   return true;
 }
 
@@ -743,6 +771,8 @@ async function saveFileAs() {
   updateTitle();
   await window.mdpad.clearSession();
   await window.mdpad.clearAutosaveBackup();
+  await window.mdpad.invalidateGitCache(currentFilePath);
+  refreshGitInfo();
   return true;
 }
 
@@ -765,6 +795,7 @@ async function loadFileByPath(filePath) {
   const state = getPaneState();
   if (state.preview) updatePreviewImmediate(result.content);
   if (state.diff) updateDiff(result.content, originalContent);
+  refreshGitInfo();
 }
 
 // --- Drag-and-drop ---
@@ -1345,6 +1376,7 @@ async function performRestore(rec) {
 
   // Re-trigger global search if active, to fix search after recovery
   triggerGlobalSearchUpdate();
+  refreshGitInfo();
 }
 
 async function cleanupOrphans(autosaves) {

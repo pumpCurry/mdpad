@@ -4,6 +4,7 @@ import { t, onLocaleChange } from "../../i18n/i18n-renderer.js";
 let statusBarEl = null;
 let updateTimer = null;
 let countdownTimer = null; // 1-second timer for backup countdown
+let gitInfo = null; // { repoName, branch, commitHash, commitCount } or null
 
 export function initStatusBar() {
   statusBarEl = document.getElementById("status-bar");
@@ -24,6 +25,7 @@ function renderStatusBar() {
     <span id="sb-lines">0 ${t("statusBar.lines")}</span>
     <span id="sb-ins" style="display:none;color:#cf222e;font-weight:600">&lt;INS&gt;</span>
     <span class="spacer"></span>
+    <span id="sb-git" class="sb-git-info" style="display:none"></span>
     <span id="sb-backup" style="width:150px;text-align:center;flex-shrink:0">${t("statusBar.backupOff")}</span>
     <span id="sb-zoom" style="width:55px;text-align:center;flex-shrink:0">100%</span>
     <span id="sb-encoding" style="width:50px;text-align:center;flex-shrink:0">${t("statusBar.encoding")}</span>
@@ -34,6 +36,9 @@ function renderStatusBar() {
   statusBarEl.querySelector("#sb-cursor").addEventListener("click", () => {
     window.dispatchEvent(new CustomEvent("mdpad:goToLine"));
   });
+
+  // Update git display if info already available
+  updateGitStatusDisplay();
 
   // Restart countdown
   countdownTimer = setInterval(updateBackupCountdown, 1000);
@@ -93,6 +98,34 @@ function updateBackupCountdown() {
   } else {
     backupEl.textContent = t("statusBar.backupNext").replace("{remaining}", formatRemaining(remaining));
   }
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function updateGitStatusDisplay() {
+  if (!statusBarEl) return;
+  const gitEl = statusBarEl.querySelector("#sb-git");
+  if (!gitEl) return;
+
+  if (!gitInfo) {
+    gitEl.style.display = "none";
+    return;
+  }
+
+  gitEl.style.display = "inline-flex";
+  gitEl.innerHTML = `
+    <span class="sb-git-repo" title="${t("statusBar.gitRepo")}">${escapeHtml(gitInfo.repoName)}</span>
+    <span class="sb-git-branch" title="${t("statusBar.gitBranch")}">${escapeHtml(gitInfo.branch)}</span>
+    <span class="sb-git-hash" title="${t("statusBar.gitCommit")}">${escapeHtml(gitInfo.commitHash)}</span>
+    <span class="sb-git-count" title="${t("statusBar.gitCommitCount")}">(${gitInfo.commitCount})</span>
+  `;
+}
+
+export function setGitInfo(info) {
+  gitInfo = info;
+  updateGitStatusDisplay();
 }
 
 export function updateStatusBar() {

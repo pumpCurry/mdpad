@@ -3,6 +3,7 @@ const fs = require("fs/promises");
 const path = require("path");
 const { addRecentFile, getRecentFiles } = require("./recent-files");
 const { t } = require("../i18n/i18n-main");
+const { getGitInfo, getGitFileContent, invalidateGitCache } = require("./git-utils");
 
 let registered = false;
 
@@ -85,6 +86,19 @@ function registerIpcHandlers() {
   ipcMain.handle("window:setTitle", (event, title) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (win) win.setTitle(title);
+  });
+
+  // Git operations
+  ipcMain.handle("git:getInfo", async (_event, filePath) => {
+    return getGitInfo(filePath);
+  });
+
+  ipcMain.handle("git:getFileContent", async (_event, filePath) => {
+    return getGitFileContent(filePath);
+  });
+
+  ipcMain.handle("git:invalidateCache", async (_event, filePath) => {
+    invalidateGitCache(filePath);
   });
 }
 
