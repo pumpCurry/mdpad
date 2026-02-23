@@ -134,6 +134,7 @@ This project uses the following open-source libraries:
 ## Documentation
 
 - [User Guide](docs/en/how_to_use.md)
+- [Update History](docs/en/updates.md)
 
 ## License
 

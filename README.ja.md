@@ -150,3 +150,4 @@ MIT License - (C) pumpCurry, 5r4ce2
 ## ドキュメント
 
 - [使い方ガイド](docs/ja/how_to_use.md)
+- [更新履歴](docs/ja/updates.md)
