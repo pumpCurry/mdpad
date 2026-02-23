@@ -228,10 +228,8 @@ function createWindow(openFilePath) {
     ipcMain.handle("i18n:getSupportedLocales", () => getSupportedLocales());
     ipcMain.handle("i18n:setLocale", (_event, locale) => {
       setLocale(locale);
-      // Rebuild menu for all windows
-      for (const w of BrowserWindow.getAllWindows()) {
-        createMenu(w);
-      }
+      // Rebuild menu with new locale (menu is app-global, no specific window needed)
+      createMenu(null);
     });
 
     // IPC: session save (called periodically from renderer)
@@ -253,10 +251,8 @@ function createWindow(openFilePath) {
     ipcMain.handle("autosave:getMinutes", () => getAutosaveMinutes());
     ipcMain.handle("autosave:setMinutes", (_event, minutes) => {
       setAutosaveMinutes(minutes);
-      // Rebuild menu for all windows
-      for (const w of BrowserWindow.getAllWindows()) {
-        createMenu(w);
-      }
+      // Rebuild menu with new autosave setting (menu is app-global)
+      createMenu(null);
     });
     ipcMain.handle("autosave:save", (_event, data) => {
       saveAutosaveBackup(data);

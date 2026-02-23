@@ -1,4 +1,4 @@
-const { Menu } = require("electron");
+const { Menu, BrowserWindow } = require("electron");
 const { t, getLocale, setLocale, getSupportedLocales } = require("../i18n/i18n-main");
 const { getAutosaveMinutes } = require("./autosave-manager");
 
@@ -7,7 +7,33 @@ const localeLabels = {
   ja: "日本語",
 };
 
-function createMenu(mainWindow) {
+/**
+ * Get the window that should receive menu actions.
+ * Uses the focused window first, then falls back to the first available window.
+ * Returns null if no valid window exists.
+ */
+function getTargetWindow() {
+  const focused = BrowserWindow.getFocusedWindow();
+  if (focused && !focused.isDestroyed()) return focused;
+  const all = BrowserWindow.getAllWindows();
+  for (const w of all) {
+    if (!w.isDestroyed()) return w;
+  }
+  return null;
+}
+
+/**
+ * Safely send an IPC message to the target window.
+ * No-op if no valid window is available.
+ */
+function sendToTarget(channel, ...args) {
+  const win = getTargetWindow();
+  if (win && !win.isDestroyed() && win.webContents && !win.webContents.isDestroyed()) {
+    win.webContents.send(channel, ...args);
+  }
+}
+
+function createMenu(_mainWindow) {
   const currentLocale = getLocale();
   const currentAutosave = getAutosaveMinutes();
 
@@ -18,8 +44,13 @@ function createMenu(mainWindow) {
     checked: loc === currentLocale,
     click: () => {
       setLocale(loc);
-      createMenu(mainWindow); // Rebuild menu
-      mainWindow.webContents.send("menu:action", "changeLocale:" + loc);
+      createMenu(null); // Rebuild menu (no specific window needed)
+      // Notify ALL windows about locale change
+      for (const w of BrowserWindow.getAllWindows()) {
+        if (!w.isDestroyed() && w.webContents && !w.webContents.isDestroyed()) {
+          w.webContents.send("menu:action", "changeLocale:" + loc);
+        }
+      }
     },
   }));
 
@@ -30,7 +61,7 @@ function createMenu(mainWindow) {
     type: "radio",
     checked: currentAutosave === min,
     click: () => {
-      mainWindow.webContents.send("menu:action", "setAutosave:" + min);
+      sendToTarget("menu:action", "setAutosave:" + min);
     },
   }));
 
@@ -41,28 +72,28 @@ function createMenu(mainWindow) {
         {
           label: t("menu.file_new"),
           accelerator: "CmdOrCtrl+N",
-          click: () => mainWindow.webContents.send("menu:action", "new"),
+          click: () => sendToTarget("menu:action", "new"),
         },
         {
           label: t("menu.file_newWindow"),
           accelerator: "CmdOrCtrl+Shift+N",
-          click: () => mainWindow.webContents.send("menu:action", "newWindow"),
+          click: () => sendToTarget("menu:action", "newWindow"),
         },
         {
           label: t("menu.file_open"),
           accelerator: "CmdOrCtrl+O",
-          click: () => mainWindow.webContents.send("menu:action", "open"),
+          click: () => sendToTarget("menu:action", "open"),
         },
         { type: "separator" },
         {
           label: t("menu.file_save"),
           accelerator: "CmdOrCtrl+S",
-          click: () => mainWindow.webContents.send("menu:action", "save"),
+          click: () => sendToTarget("menu:action", "save"),
         },
         {
           label: t("menu.file_saveAs"),
           accelerator: "CmdOrCtrl+Shift+S",
-          click: () => mainWindow.webContents.send("menu:action", "saveAs"),
+          click: () => sendToTarget("menu:action", "saveAs"),
         },
         { type: "separator" },
         {
@@ -71,13 +102,16 @@ function createMenu(mainWindow) {
         },
         {
           label: t("menu.file_restoreBackup"),
-          click: () => mainWindow.webContents.send("menu:action", "restoreBackup"),
+          click: () => sendToTarget("menu:action", "restoreBackup"),
         },
         { type: "separator" },
         {
           label: t("menu.file_exit"),
           accelerator: "Alt+F4",
-          click: () => mainWindow.close(),
+          click: () => {
+            const win = getTargetWindow();
+            if (win) win.close();
+          },
         },
       ],
     },
@@ -87,12 +121,12 @@ function createMenu(mainWindow) {
         {
           label: t("menu.edit_undo"),
           accelerator: "CmdOrCtrl+Z",
-          click: () => mainWindow.webContents.send("menu:action", "undo"),
+          click: () => sendToTarget("menu:action", "undo"),
         },
         {
           label: t("menu.edit_redo"),
           accelerator: "CmdOrCtrl+Y",
-          click: () => mainWindow.webContents.send("menu:action", "redo"),
+          click: () => sendToTarget("menu:action", "redo"),
         },
         { type: "separator" },
         { role: "cut", label: t("menu.edit_cut") },
@@ -103,18 +137,18 @@ function createMenu(mainWindow) {
         {
           label: t("menu.edit_find"),
           accelerator: "CmdOrCtrl+F",
-          click: () => mainWindow.webContents.send("menu:action", "find"),
+          click: () => sendToTarget("menu:action", "find"),
         },
         {
           label: t("menu.edit_replace"),
           accelerator: "CmdOrCtrl+H",
-          click: () => mainWindow.webContents.send("menu:action", "replace"),
+          click: () => sendToTarget("menu:action", "replace"),
         },
         { type: "separator" },
         {
           label: t("menu.edit_goToLine"),
           accelerator: "CmdOrCtrl+G",
-          click: () => mainWindow.webContents.send("menu:action", "goToLine"),
+          click: () => sendToTarget("menu:action", "goToLine"),
         },
       ],
     },
@@ -124,34 +158,30 @@ function createMenu(mainWindow) {
         {
           label: t("menu.view_toggleEditor"),
           accelerator: "CmdOrCtrl+1",
-          click: () =>
-            mainWindow.webContents.send("menu:action", "toggleEditor"),
+          click: () => sendToTarget("menu:action", "toggleEditor"),
         },
         {
           label: t("menu.view_togglePreview"),
           accelerator: "CmdOrCtrl+2",
-          click: () =>
-            mainWindow.webContents.send("menu:action", "togglePreview"),
+          click: () => sendToTarget("menu:action", "togglePreview"),
         },
         {
           label: t("menu.view_toggleDiff"),
           accelerator: "CmdOrCtrl+3",
-          click: () =>
-            mainWindow.webContents.send("menu:action", "toggleDiff"),
+          click: () => sendToTarget("menu:action", "toggleDiff"),
         },
         { type: "separator" },
         {
           label: t("menu.view_toggleWordWrap"),
           accelerator: "Alt+Z",
-          click: () =>
-            mainWindow.webContents.send("menu:action", "toggleWordWrap"),
+          click: () => sendToTarget("menu:action", "toggleWordWrap"),
         },
         {
           label: t("menu.view_toggleCloseBrackets"),
           type: "checkbox",
           checked: true,
           click: (menuItem) =>
-            mainWindow.webContents.send("menu:action", "toggleCloseBrackets"),
+            sendToTarget("menu:action", "toggleCloseBrackets"),
         },
         { type: "separator" },
         {
@@ -178,7 +208,10 @@ function createMenu(mainWindow) {
         {
           label: t("menu.view_devTools"),
           accelerator: "F12",
-          click: () => mainWindow.webContents.toggleDevTools(),
+          click: () => {
+            const win = getTargetWindow();
+            if (win) win.webContents.toggleDevTools();
+          },
         },
       ],
     },
@@ -187,7 +220,7 @@ function createMenu(mainWindow) {
       submenu: [
         {
           label: t("menu.help_about"),
-          click: () => mainWindow.webContents.send("menu:action", "about"),
+          click: () => sendToTarget("menu:action", "about"),
         },
       ],
     },
