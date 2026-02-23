@@ -65,7 +65,7 @@ function resolveExePath() {
   const arg = process.argv[2];
   if (arg) return path.resolve(arg);
 
-  const candidates = ["build17", "build16", "build15", "build14", "build13", "build12", "build11", "build10", "build9", "build8", "build7", "build6", "build5", "build4", "build3", "build2", "build"].map(
+  const candidates = ["build19", "build18", "build17", "build16", "build15", "build14", "build13", "build12", "build11", "build10", "build9", "build8", "build7", "build6", "build5", "build4", "build3", "build2", "build"].map(
     (d) => path.join(__dirname, "..", d, "win-unpacked", "mdpad.exe")
   );
   for (const p of candidates) {
@@ -79,7 +79,7 @@ function resolveExePath() {
 // ---------------------------------------------------------------------------
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let stepNum = 0;
-const totalSteps = 16;
+const totalSteps = 17;
 const results = [];
 
 function stepStart(label) {
@@ -720,6 +720,45 @@ async function main() {
       await sleep(200);
     }
     stepOK(`Process exited (code=${exitCode})`);
+
+    // =====================================================================
+    // Phase 8: Cleanup verification
+    // =====================================================================
+    stepStart("Verifying test artifact cleanup...");
+    // Clean up the fake session file created in step 1
+    let cleanedUp = 0;
+    try {
+      if (fs.existsSync(sessionFile)) {
+        fs.unlinkSync(sessionFile);
+        cleanedUp++;
+      }
+    } catch {}
+    // Also clean up any stale session/autosave files from previous test runs
+    const sessionsDir = path.join(getUserDataPath(), "sessions");
+    const autosaveDir = path.join(getUserDataPath(), "autosave");
+    for (const dir of [sessionsDir, autosaveDir]) {
+      try {
+        if (!fs.existsSync(dir)) continue;
+        for (const f of fs.readdirSync(dir)) {
+          if (f.endsWith(".json")) {
+            // Parse PID from filename: session-PID.json or session-PID-WID.json
+            const stem = f.replace(/^(session|autosave)-/, "").replace(".json", "");
+            const pid = parseInt(stem.split("-")[0], 10);
+            if (isNaN(pid)) continue;
+            // Check if process is still running (skip if alive)
+            let alive = false;
+            try { process.kill(pid, 0); alive = true; } catch {}
+            if (!alive) {
+              try {
+                fs.unlinkSync(path.join(dir, f));
+                cleanedUp++;
+              } catch {}
+            }
+          }
+        }
+      } catch {}
+    }
+    stepOK(`Cleaned up ${cleanedUp} stale artifact(s)`);
 
     // =====================================================================
     // Summary

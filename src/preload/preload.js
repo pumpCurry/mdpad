@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld("mdpad", {
 
   // Window
   setTitle: (title) => ipcRenderer.invoke("window:setTitle", title),
+  getWindowId: () => ipcRenderer.invoke("window:getWindowId"),
 
   // Zoom level (webFrame)
   getZoomLevel: () => webFrame.getZoomLevel(),

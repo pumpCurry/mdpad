@@ -161,7 +161,11 @@ async function init() {
   startAutosaveTimer();
 
   // Check for crash recovery: sessions first, then autosave backups
-  await checkRecovery();
+  // Skip if this window was opened with a file (e.g. drop, file association)
+  const urlParams = new URLSearchParams(window.location.search);
+  if (!urlParams.has("hasFile")) {
+    await checkRecovery();
+  }
 
   // Update title
   updateTitle();

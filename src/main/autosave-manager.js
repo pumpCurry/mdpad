@@ -91,19 +91,21 @@ function setAutosaveMinutes(minutes) {
  * Save a backup of the current editor state.
  * Called from the renderer via IPC.
  * @param {Object} data - { content, filePath, originalContent, isDirty, timestamp }
+ * @param {number} windowId - Unique window ID for multi-window isolation
  */
-function saveAutosaveBackup(data) {
+function saveAutosaveBackup(data, windowId) {
   if (autosaveMinutes === 0) return; // Autosave is OFF
 
   try {
     const dir = getAutosaveDir();
-    const backupFile = path.join(dir, `autosave-${process.pid}.json`);
+    const backupFile = path.join(dir, `autosave-${process.pid}-${windowId || 0}.json`);
     const backupData = {
       content: data.content,
       filePath: data.filePath || null,
       originalContent: data.originalContent || "",
       isDirty: data.isDirty,
       pid: process.pid,
+      windowId: windowId || 0,
       savedAt: Date.now(),
     };
     fs.writeFileSync(backupFile, JSON.stringify(backupData), "utf-8");
@@ -113,12 +115,13 @@ function saveAutosaveBackup(data) {
 }
 
 /**
- * Clear autosave backup for this process (called on successful save or clean close).
+ * Clear autosave backup for a specific window (called on successful save or clean close).
+ * @param {number} windowId - Unique window ID
  */
-function clearAutosaveBackup() {
+function clearAutosaveBackup(windowId) {
   try {
     const dir = getAutosaveDir();
-    const backupFile = path.join(dir, `autosave-${process.pid}.json`);
+    const backupFile = path.join(dir, `autosave-${process.pid}-${windowId || 0}.json`);
     if (fs.existsSync(backupFile)) {
       fs.unlinkSync(backupFile);
     }
@@ -129,6 +132,7 @@ function clearAutosaveBackup() {
 
 /**
  * Load orphaned autosave backups from crashed processes.
+ * Handles both old format (autosave-PID.json) and new format (autosave-PID-WID.json).
  * Returns array of backup objects.
  */
 function loadOrphanedAutosaves() {
@@ -142,10 +146,12 @@ function loadOrphanedAutosaves() {
     for (const file of files) {
       if (!file.startsWith("autosave-") || !file.endsWith(".json")) continue;
 
-      const pidStr = file.replace("autosave-", "").replace(".json", "");
-      const pid = parseInt(pidStr, 10);
+      // Parse PID from filename: autosave-PID.json or autosave-PID-WID.json
+      const stem = file.replace("autosave-", "").replace(".json", "");
+      const pid = parseInt(stem.split("-")[0], 10);
+      if (isNaN(pid)) continue;
 
-      // Skip our own backup
+      // Skip our own backups
       if (pid === process.pid) continue;
 
       // Check if that process is still running
@@ -185,21 +191,23 @@ function removeOrphanedBackup(backupFilePath) {
 /**
  * Force-save a resume backup (used when user chooses "Resume Save" on close).
  * Unlike saveAutosaveBackup(), this works even when autosave is OFF.
- * Uses a unique "resume-" prefix so it's always picked up as an orphan.
+ * @param {Object} data - backup data
+ * @param {number} windowId - Unique window ID
  */
-function saveResumeBackup(data) {
+function saveResumeBackup(data, windowId) {
   try {
     const dir = getAutosaveDir();
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    const backupFile = path.join(dir, `autosave-${process.pid}.json`);
+    const backupFile = path.join(dir, `autosave-${process.pid}-${windowId || 0}.json`);
     const backupData = {
       content: data.content,
       filePath: data.filePath || null,
       originalContent: data.originalContent || "",
       isDirty: true,
       pid: process.pid,
+      windowId: windowId || 0,
       savedAt: Date.now(),
     };
     fs.writeFileSync(backupFile, JSON.stringify(backupData), "utf-8");

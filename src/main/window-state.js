@@ -34,17 +34,21 @@ function restoreWindowState() {
 }
 
 function saveWindowState(win) {
-  if (!win) return;
-  const config = readConfig();
-  config.isMaximized = win.isMaximized();
-  if (!win.isMaximized()) {
-    const bounds = win.getBounds();
-    config.windowWidth = bounds.width;
-    config.windowHeight = bounds.height;
-    config.windowX = bounds.x;
-    config.windowY = bounds.y;
+  if (!win || win.isDestroyed()) return;
+  try {
+    const config = readConfig();
+    config.isMaximized = win.isMaximized();
+    if (!win.isMaximized()) {
+      const bounds = win.getBounds();
+      config.windowWidth = bounds.width;
+      config.windowHeight = bounds.height;
+      config.windowX = bounds.x;
+      config.windowY = bounds.y;
+    }
+    writeConfig(config);
+  } catch {
+    // Window may have been destroyed between check and access
   }
-  writeConfig(config);
 }
 
 module.exports = { restoreWindowState, saveWindowState };

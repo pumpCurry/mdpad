@@ -12,9 +12,9 @@ const {
   setAutosaveMinutes,
   saveAutosaveBackup,
   saveResumeBackup,
-  clearAutosaveBackup,
   loadOrphanedAutosaves,
   removeOrphanedBackup,
+  getAutosaveDir,
 } = require("./autosave-manager");
 
 // Explicitly allow multiple instances — no single-instance lock.
@@ -24,6 +24,7 @@ const {
 let mainWindow = null;
 let forceQuit = false;
 let ipcRegistered = false; // IPC handlers registered once globally
+let nextWindowId = 1; // Unique ID for each BrowserWindow (for session/autosave isolation)
 
 function createWindow(openFilePath) {
   // Initialize i18n (detects OS locale or stored preference)
@@ -44,17 +45,31 @@ function createWindow(openFilePath) {
     },
   });
 
+  // Assign a unique window ID for session/autosave isolation
+  const windowId = nextWindowId++;
+  win.__mdpadWindowId = windowId;
+
   if (bounds.isMaximized) {
     win.maximize();
   }
 
-  win.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
-
-  // If a file path was passed, send it to renderer after load
+  // Load renderer HTML; pass hasFile flag so renderer can skip recovery check
   if (openFilePath) {
-    win.webContents.once("did-finish-load", () => {
-      win.webContents.send("menu:action", "dropOpenFile:" + openFilePath);
+    win.loadFile(path.join(__dirname, "..", "renderer", "index.html"), {
+      query: { hasFile: "1" },
     });
+    win.webContents.once("did-finish-load", () => {
+      if (!win.isDestroyed()) {
+        win.webContents.send("menu:action", "dropOpenFile:" + openFilePath);
+      }
+    });
+  } else {
+    win.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
+  }
+
+  // Helper: check if window and webContents are still alive
+  function isAlive() {
+    return win && !win.isDestroyed() && win.webContents && !win.webContents.isDestroyed();
   }
 
   // Per-window forceQuit flag
@@ -66,7 +81,7 @@ function createWindow(openFilePath) {
 
   const closeDialogListener = (event, result) => {
     // Only handle events from this window's webContents
-    if (event.sender === win.webContents && closeDialogResolve) {
+    if (isAlive() && event.sender === win.webContents && closeDialogResolve) {
       closeDialogResolve(result);
       closeDialogResolve = null;
     }
@@ -75,11 +90,22 @@ function createWindow(openFilePath) {
 
   // Close handler: intercept and ask renderer for dirty state
   win.on("close", async (e) => {
-    saveWindowState(win);
+    if (!win.isDestroyed()) {
+      saveWindowState(win);
+    }
 
     if (forceQuit || windowForceQuit) return; // Already confirmed, let it close
 
     e.preventDefault();
+
+    // If webContents is already destroyed, just close
+    if (!isAlive()) {
+      windowForceQuit = true;
+      clearSessionForWindow(windowId);
+      clearAutosaveForWindow(windowId);
+      win.close();
+      return;
+    }
 
     try {
       // Ask renderer: are you dirty? do you have a file path?
@@ -90,15 +116,30 @@ function createWindow(openFilePath) {
       if (!state.isDirty) {
         // Clean — close immediately, clear session + autosave
         windowForceQuit = true;
-        clearSession();
-        clearAutosaveBackup();
+        clearSessionForWindow(windowId);
+        clearAutosaveForWindow(windowId);
+        win.close();
+        return;
+      }
+
+      // If webContents died during await, force close
+      if (!isAlive()) {
+        windowForceQuit = true;
         win.close();
         return;
       }
 
       // Dirty — send to renderer to show HTML close dialog
+      // Add timeout to prevent permanent hang if renderer never responds
+      const CLOSE_DIALOG_TIMEOUT_MS = 30000;
       const resultPromise = new Promise((resolve) => {
         closeDialogResolve = resolve;
+        setTimeout(() => {
+          if (closeDialogResolve === resolve) {
+            closeDialogResolve = null;
+            resolve("_timeout");
+          }
+        }, CLOSE_DIALOG_TIMEOUT_MS);
       });
 
       win.webContents.send("close:showDialog", {
@@ -109,18 +150,29 @@ function createWindow(openFilePath) {
 
       const result = await resultPromise;
 
+      // If timed out, force close
+      if (result === "_timeout") {
+        windowForceQuit = true;
+        clearSessionForWindow(windowId);
+        clearAutosaveForWindow(windowId);
+        win.close();
+        return;
+      }
+
       if (result === "save") {
         // Overwrite save (existing file)
+        if (!isAlive()) { windowForceQuit = true; win.close(); return; }
         const content = await win.webContents.executeJavaScript(
           `window.__mdpadGetContent ? window.__mdpadGetContent() : ""`
         );
         fs.writeFileSync(state.filePath, content, "utf-8");
         windowForceQuit = true;
-        clearSession();
-        clearAutosaveBackup();
+        clearSessionForWindow(windowId);
+        clearAutosaveForWindow(windowId);
         win.close();
       } else if (result === "saveAs") {
         // Save As dialog
+        if (!isAlive()) { windowForceQuit = true; win.close(); return; }
         const saveResult = await dialog.showSaveDialog(win, {
           filters: [
             { name: t("dialog.filterMarkdown"), extensions: ["md"] },
@@ -129,18 +181,20 @@ function createWindow(openFilePath) {
           ],
         });
         if (!saveResult.canceled) {
+          if (!isAlive()) { windowForceQuit = true; win.close(); return; }
           const content = await win.webContents.executeJavaScript(
             `window.__mdpadGetContent ? window.__mdpadGetContent() : ""`
           );
           fs.writeFileSync(saveResult.filePath, content, "utf-8");
           windowForceQuit = true;
-          clearSession();
-          clearAutosaveBackup();
+          clearSessionForWindow(windowId);
+          clearAutosaveForWindow(windowId);
           win.close();
         }
         // If canceled, stay open
       } else if (result === "resumeSave") {
         // Resume save: force backup then close
+        if (!isAlive()) { windowForceQuit = true; win.close(); return; }
         const content = await win.webContents.executeJavaScript(
           `window.__mdpadGetContent ? window.__mdpadGetContent() : ""`
         );
@@ -149,15 +203,15 @@ function createWindow(openFilePath) {
           filePath: state.filePath,
           originalContent: "",
           isDirty: true,
-        });
+        }, windowId);
         windowForceQuit = true;
-        clearSession();
+        clearSessionForWindow(windowId);
         win.close();
       } else if (result === "exitNoSave") {
         // Exit without saving
         windowForceQuit = true;
-        clearSession();
-        clearAutosaveBackup();
+        clearSessionForWindow(windowId);
+        clearAutosaveForWindow(windowId);
         win.close();
       }
       // If result === "cancel" or anything else, stay open
@@ -171,6 +225,7 @@ function createWindow(openFilePath) {
   win.on("closed", () => {
     // Clean up the close dialog listener for this window
     ipcMain.removeListener("close:dialogResult", closeDialogListener);
+    closeDialogResolve = null; // Prevent stale resolver
     if (win === mainWindow) {
       mainWindow = null;
     }
@@ -232,9 +287,17 @@ function createWindow(openFilePath) {
       createMenu(null);
     });
 
+    // IPC: get window ID for this renderer (used for session/autosave isolation)
+    ipcMain.handle("window:getWindowId", (event) => {
+      const w = BrowserWindow.fromWebContents(event.sender);
+      return w ? w.__mdpadWindowId : 0;
+    });
+
     // IPC: session save (called periodically from renderer)
-    ipcMain.handle("session:save", (_event, sessionData) => {
-      saveSession(sessionData);
+    ipcMain.handle("session:save", (event, sessionData) => {
+      const w = BrowserWindow.fromWebContents(event.sender);
+      const wid = w ? w.__mdpadWindowId : 0;
+      saveSession(sessionData, wid);
     });
 
     // IPC: get session data for recovery
@@ -243,8 +306,10 @@ function createWindow(openFilePath) {
     });
 
     // IPC: clear session after successful save/close
-    ipcMain.handle("session:clear", () => {
-      clearSession();
+    ipcMain.handle("session:clear", (event) => {
+      const w = BrowserWindow.fromWebContents(event.sender);
+      const wid = w ? w.__mdpadWindowId : 0;
+      clearSessionForWindow(wid);
     });
 
     // IPC: autosave
@@ -254,14 +319,20 @@ function createWindow(openFilePath) {
       // Rebuild menu with new autosave setting (menu is app-global)
       createMenu(null);
     });
-    ipcMain.handle("autosave:save", (_event, data) => {
-      saveAutosaveBackup(data);
+    ipcMain.handle("autosave:save", (event, data) => {
+      const w = BrowserWindow.fromWebContents(event.sender);
+      const wid = w ? w.__mdpadWindowId : 0;
+      saveAutosaveBackup(data, wid);
     });
-    ipcMain.handle("autosave:clear", () => {
-      clearAutosaveBackup();
+    ipcMain.handle("autosave:clear", (event) => {
+      const w = BrowserWindow.fromWebContents(event.sender);
+      const wid = w ? w.__mdpadWindowId : 0;
+      clearAutosaveForWindow(wid);
     });
-    ipcMain.handle("autosave:resumeSave", (_event, data) => {
-      saveResumeBackup(data);
+    ipcMain.handle("autosave:resumeSave", (event, data) => {
+      const w = BrowserWindow.fromWebContents(event.sender);
+      const wid = w ? w.__mdpadWindowId : 0;
+      saveResumeBackup(data, wid);
     });
     ipcMain.handle("autosave:getOrphaned", () => {
       return loadOrphanedAutosaves();
@@ -319,12 +390,24 @@ function createWindow(openFilePath) {
   return win;
 }
 
-function clearSession() {
+function clearSessionForWindow(windowId) {
   try {
     const sessionDir = getSessionDir();
-    const sessionFile = path.join(sessionDir, `session-${process.pid}.json`);
+    const sessionFile = path.join(sessionDir, `session-${process.pid}-${windowId}.json`);
     if (fs.existsSync(sessionFile)) {
       fs.unlinkSync(sessionFile);
+    }
+  } catch {
+    // Ignore cleanup errors
+  }
+}
+
+function clearAutosaveForWindow(windowId) {
+  try {
+    const dir = getAutosaveDir();
+    const backupFile = path.join(dir, `autosave-${process.pid}-${windowId}.json`);
+    if (fs.existsSync(backupFile)) {
+      fs.unlinkSync(backupFile);
     }
   } catch {
     // Ignore cleanup errors
@@ -342,11 +425,12 @@ function loadRecoverySessions() {
     for (const file of files) {
       if (!file.startsWith("session-") || !file.endsWith(".json")) continue;
 
-      // Extract PID from filename
-      const pidStr = file.replace("session-", "").replace(".json", "");
-      const pid = parseInt(pidStr, 10);
+      // Parse PID from filename: session-PID.json or session-PID-WID.json
+      const stem = file.replace("session-", "").replace(".json", "");
+      const pid = parseInt(stem.split("-")[0], 10);
+      if (isNaN(pid)) continue;
 
-      // Skip our own session file
+      // Skip our own session files
       if (pid === process.pid) continue;
 
       // Check if that process is still running

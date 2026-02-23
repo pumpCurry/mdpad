@@ -24,16 +24,18 @@ function initSessionManager() {
 }
 
 /**
- * Save current session state to a PID-specific file.
+ * Save current session state to a PID+windowId-specific file.
  * @param {Object} data - { content, filePath, isDirty, paneState, timestamp }
+ * @param {number} windowId - Unique window ID for multi-window isolation
  */
-function saveSession(data) {
+function saveSession(data, windowId) {
   try {
     const dir = getSessionDir();
-    const sessionFile = path.join(dir, `session-${process.pid}.json`);
+    const sessionFile = path.join(dir, `session-${process.pid}-${windowId || 0}.json`);
     const sessionData = {
       ...data,
       pid: process.pid,
+      windowId: windowId || 0,
       savedAt: Date.now(),
     };
     fs.writeFileSync(sessionFile, JSON.stringify(sessionData), "utf-8");

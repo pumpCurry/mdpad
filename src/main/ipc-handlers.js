@@ -18,6 +18,7 @@ function registerIpcHandlers() {
 
   ipcMain.handle("file:open", async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || win.isDestroyed()) return null;
     const result = await dialog.showOpenDialog(win, {
       properties: ["openFile"],
       filters: [
@@ -50,6 +51,7 @@ function registerIpcHandlers() {
 
   ipcMain.handle("file:saveAs", async (event, content) => {
     const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || win.isDestroyed()) return null;
     const result = await dialog.showSaveDialog(win, {
       filters: [
         { name: t("dialog.filterMarkdown"), extensions: ["md"] },
@@ -69,6 +71,7 @@ function registerIpcHandlers() {
 
   ipcMain.handle("diff:openFile", async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || win.isDestroyed()) return null;
     const result = await dialog.showOpenDialog(win, {
       properties: ["openFile"],
       filters: [
