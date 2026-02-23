@@ -19,11 +19,15 @@ try {
 const [major, minor] = pkg.version.split(".");
 const versionTag = `v${major}.${minor}.${String(buildNumber).padStart(5, "0")}`;
 
-// Auto-detect build output directory (newest first)
-const buildCandidates = ["build16", "build15", "build14", "build13", "build12", "build11", "build10", "build9", "build8", "build7", "build6", "build5", "build4", "build3", "build2", "build"].map(
-  (d) => path.join(__dirname, "..", d, "win-unpacked")
-);
-const buildDir = buildCandidates.find((d) => fs.existsSync(d)) || buildCandidates[buildCandidates.length - 1];
+// Read build output directory from electron-builder.yml
+let ebOutput = "build";
+try {
+  const ymlPath = path.join(__dirname, "..", "electron-builder.yml");
+  const ymlContent = fs.readFileSync(ymlPath, "utf-8");
+  const match = ymlContent.match(/^\s*output:\s*(.+)/m);
+  if (match) ebOutput = match[1].trim();
+} catch {}
+const buildDir = path.join(__dirname, "..", ebOutput, "win-unpacked");
 const outputDir = path.dirname(buildDir);
 const zipName = `mdpad-${versionTag}-win-x64-portable.zip`;
 const zipPath = path.join(outputDir, zipName);
