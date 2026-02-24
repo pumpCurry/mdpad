@@ -6,7 +6,7 @@ contextBridge.exposeInMainWorld("mdpad", {
   openFileByPath: (filePath) => ipcRenderer.invoke("file:openByPath", filePath),
   saveFile: (filePath, content) =>
     ipcRenderer.invoke("file:save", filePath, content),
-  saveFileAs: (content) => ipcRenderer.invoke("file:saveAs", content),
+  saveFileAs: (content, filePath) => ipcRenderer.invoke("file:saveAs", content, filePath),
   getRecentFiles: () => ipcRenderer.invoke("file:getRecent"),
 
   // Diff
@@ -15,7 +15,11 @@ contextBridge.exposeInMainWorld("mdpad", {
   // Git
   getGitInfo: (filePath) => ipcRenderer.invoke("git:getInfo", filePath),
   getGitFileContent: (filePath) => ipcRenderer.invoke("git:getFileContent", filePath),
+  getDetailedGitInfo: (filePath) => ipcRenderer.invoke("git:getDetailedInfo", filePath),
   invalidateGitCache: (filePath) => ipcRenderer.invoke("git:invalidateCache", filePath),
+
+  // File properties
+  getFileProperties: (filePath) => ipcRenderer.invoke("file:getProperties", filePath),
 
   // Window
   setTitle: (title) => ipcRenderer.invoke("window:setTitle", title),

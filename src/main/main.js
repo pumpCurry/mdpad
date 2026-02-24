@@ -26,6 +26,16 @@ let forceQuit = false;
 let ipcRegistered = false; // IPC handlers registered once globally
 let nextWindowId = 1; // Unique ID for each BrowserWindow (for session/autosave isolation)
 
+/**
+ * Convert content from LF (CodeMirror internal) to specified EOL type.
+ */
+function applyEolMain(content, eolType) {
+  const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  if (eolType === "CRLF") return normalized.replace(/\n/g, "\r\n");
+  if (eolType === "CR") return normalized.replace(/\n/g, "\r");
+  return normalized; // LF
+}
+
 function createWindow(openFilePath) {
   // Initialize i18n (detects OS locale or stored preference)
   initLocale();
@@ -165,7 +175,11 @@ function createWindow(openFilePath) {
         const content = await win.webContents.executeJavaScript(
           `window.__mdpadGetContent ? window.__mdpadGetContent() : ""`
         );
-        fs.writeFileSync(state.filePath, content, "utf-8");
+        const eolType = await win.webContents.executeJavaScript(
+          `window.__mdpadGetCurrentEol ? window.__mdpadGetCurrentEol() : "LF"`
+        );
+        const contentToWrite = applyEolMain(content, eolType);
+        fs.writeFileSync(state.filePath, contentToWrite, "utf-8");
         windowForceQuit = true;
         clearSessionForWindow(windowId);
         clearAutosaveForWindow(windowId);
@@ -173,7 +187,21 @@ function createWindow(openFilePath) {
       } else if (result === "saveAs") {
         // Save As dialog
         if (!isAlive()) { windowForceQuit = true; win.close(); return; }
+
+        // Build defaultPath: existing file → its path; new file → timestamped name
+        let defaultPath;
+        if (state.filePath) {
+          defaultPath = state.filePath;
+        } else {
+          const pad = (n) => String(n).padStart(2, "0");
+          const now = new Date();
+          const ts = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+          const prefix = getLocale() === "ja" ? "無題" : "Untitled";
+          defaultPath = `${prefix}_${ts}.md`;
+        }
+
         const saveResult = await dialog.showSaveDialog(win, {
+          defaultPath,
           filters: [
             { name: t("dialog.filterMarkdown"), extensions: ["md"] },
             { name: t("dialog.filterText"), extensions: ["txt"] },
@@ -185,7 +213,11 @@ function createWindow(openFilePath) {
           const content = await win.webContents.executeJavaScript(
             `window.__mdpadGetContent ? window.__mdpadGetContent() : ""`
           );
-          fs.writeFileSync(saveResult.filePath, content, "utf-8");
+          const eolType = await win.webContents.executeJavaScript(
+            `window.__mdpadGetCurrentEol ? window.__mdpadGetCurrentEol() : "LF"`
+          );
+          const contentToWrite = applyEolMain(content, eolType);
+          fs.writeFileSync(saveResult.filePath, contentToWrite, "utf-8");
           windowForceQuit = true;
           clearSessionForWindow(windowId);
           clearAutosaveForWindow(windowId);

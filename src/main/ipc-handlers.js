@@ -1,9 +1,10 @@
 const { ipcMain, dialog, BrowserWindow } = require("electron");
 const fs = require("fs/promises");
+const fsSync = require("fs");
 const path = require("path");
 const { addRecentFile, getRecentFiles } = require("./recent-files");
-const { t } = require("../i18n/i18n-main");
-const { getGitInfo, getGitFileContent, invalidateGitCache } = require("./git-utils");
+const { t, getLocale } = require("../i18n/i18n-main");
+const { getGitInfo, getGitFileContent, getDetailedGitInfo, invalidateGitCache } = require("./git-utils");
 
 let registered = false;
 
@@ -31,14 +32,16 @@ function registerIpcHandlers() {
     const filePath = result.filePaths[0];
     const content = await fs.readFile(filePath, "utf-8");
     addRecentFile(filePath);
-    return { path: filePath, content };
+    const eol = detectEol(content);
+    return { path: filePath, content, eol };
   });
 
   ipcMain.handle("file:openByPath", async (_event, filePath) => {
     try {
       const content = await fs.readFile(filePath, "utf-8");
       addRecentFile(filePath);
-      return { path: filePath, content };
+      const eol = detectEol(content);
+      return { path: filePath, content, eol };
     } catch {
       return null;
     }
@@ -49,10 +52,22 @@ function registerIpcHandlers() {
     return true;
   });
 
-  ipcMain.handle("file:saveAs", async (event, content) => {
+  ipcMain.handle("file:saveAs", async (event, content, filePath) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win || win.isDestroyed()) return null;
+
+    // Build defaultPath for the save dialog
+    let defaultPath;
+    if (filePath) {
+      // Existing file: preset the current path and filename
+      defaultPath = filePath;
+    } else {
+      // New file: suggest a timestamped filename
+      defaultPath = generateDefaultFileName();
+    }
+
     const result = await dialog.showSaveDialog(win, {
+      defaultPath,
       filters: [
         { name: t("dialog.filterMarkdown"), extensions: ["md"] },
         { name: t("dialog.filterText"), extensions: ["txt"] },
@@ -103,6 +118,60 @@ function registerIpcHandlers() {
   ipcMain.handle("git:invalidateCache", async (_event, filePath) => {
     invalidateGitCache(filePath);
   });
+
+  // File properties (stat info for properties dialog)
+  ipcMain.handle("file:getProperties", async (_event, filePath) => {
+    try {
+      const stat = await fs.stat(filePath);
+      return {
+        size: stat.size,
+        created: stat.birthtime.toISOString(),
+        modified: stat.mtime.toISOString(),
+        accessed: stat.atime.toISOString(),
+      };
+    } catch {
+      return null;
+    }
+  });
+
+  // Detailed git info for properties dialog
+  ipcMain.handle("git:getDetailedInfo", async (_event, filePath) => {
+    return getDetailedGitInfo(filePath);
+  });
+}
+
+/**
+ * Generate a default filename for new (untitled) files.
+ * Format: 無題_YYYYMMDD-hhmmss.md (ja) or Untitled_YYYYMMDD-hhmmss.md (en)
+ */
+function generateDefaultFileName() {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  const timestamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  const prefix = getLocale() === "ja" ? "無題" : "Untitled";
+  return `${prefix}_${timestamp}.md`;
+}
+
+/**
+ * Detect the line ending type of a string.
+ * Returns "CRLF", "LF", "CR", "Mixed", or null (no line endings).
+ */
+function detectEol(content) {
+  if (!content) return null;
+  const crlfCount = (content.match(/\r\n/g) || []).length;
+  // Remove CRLF to count standalone CR and LF
+  const withoutCrlf = content.replace(/\r\n/g, "");
+  const crCount = (withoutCrlf.match(/\r/g) || []).length;
+  const lfCount = (withoutCrlf.match(/\n/g) || []).length;
+
+  const types = [];
+  if (crlfCount > 0) types.push("CRLF");
+  if (lfCount > 0) types.push("LF");
+  if (crCount > 0) types.push("CR");
+
+  if (types.length === 0) return null;
+  if (types.length === 1) return types[0];
+  return "Mixed";
 }
 
 module.exports = { registerIpcHandlers };

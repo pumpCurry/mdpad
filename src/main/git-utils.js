@@ -139,6 +139,103 @@ function getGitFileContent(filePath) {
   }
 }
 
+/**
+ * Get detailed git info for the properties dialog.
+ * Returns extended info including full commit hash, repo root, remote URL, etc.
+ */
+function getDetailedGitInfo(filePath) {
+  if (!filePath) return null;
+  if (!isGitAvailable()) return null;
+
+  const cwd = path.dirname(filePath);
+  const execOpts = {
+    cwd,
+    stdio: "pipe",
+    timeout: 5000,
+    windowsHide: true,
+    encoding: "utf-8",
+  };
+
+  try {
+    // 1. Repo root
+    const repoRoot = execFileSync(
+      "git", ["rev-parse", "--show-toplevel"], execOpts
+    ).trim();
+
+    // 2. Relative path from repo root
+    const relPath = path.relative(repoRoot, filePath).replace(/\\/g, "/");
+
+    // 3. Check if tracked
+    let isTracked = true;
+    try {
+      execFileSync("git", ["ls-files", "--error-unmatch", relPath], {
+        ...execOpts,
+        cwd: repoRoot,
+      });
+    } catch {
+      isTracked = false;
+    }
+
+    // 4. Branch name
+    let branch;
+    try {
+      branch = execFileSync(
+        "git", ["rev-parse", "--abbrev-ref", "HEAD"], execOpts
+      ).trim();
+    } catch {
+      branch = "HEAD";
+    }
+
+    // 5. Full commit hash
+    let commitHash;
+    let commitHashShort;
+    try {
+      commitHash = execFileSync(
+        "git", ["rev-parse", "HEAD"], execOpts
+      ).trim();
+      commitHashShort = commitHash.substring(0, 7);
+    } catch {
+      commitHash = "";
+      commitHashShort = "";
+    }
+
+    // 6. Commit count
+    let commitCount = 0;
+    try {
+      const count = execFileSync(
+        "git", ["rev-list", "--count", "HEAD"], execOpts
+      ).trim();
+      commitCount = parseInt(count, 10) || 0;
+    } catch {
+      commitCount = 0;
+    }
+
+    // 7. Remote URL
+    let remoteUrl = "";
+    try {
+      remoteUrl = execFileSync(
+        "git", ["remote", "get-url", "origin"], { ...execOpts, cwd: repoRoot }
+      ).trim();
+    } catch {
+      remoteUrl = "";
+    }
+
+    return {
+      repoName: path.basename(repoRoot),
+      repoRoot,
+      branch,
+      commitHash,
+      commitHashShort,
+      commitCount,
+      isTracked,
+      relPath,
+      remoteUrl,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function invalidateGitCache(filePath) {
   if (filePath) gitInfoCache.delete(filePath);
 }
@@ -147,5 +244,6 @@ module.exports = {
   isGitAvailable,
   getGitInfo,
   getGitFileContent,
+  getDetailedGitInfo,
   invalidateGitCache,
 };

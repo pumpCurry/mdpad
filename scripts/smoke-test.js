@@ -65,7 +65,19 @@ function resolveExePath() {
   const arg = process.argv[2];
   if (arg) return path.resolve(arg);
 
-  const candidates = ["build21", "build20", "build19", "build18", "build17", "build16", "build15", "build14", "build13", "build12", "build11", "build10", "build9", "build8", "build7", "build6", "build5", "build4", "build3", "build2", "build"].map(
+  // Read output dir from electron-builder.yml if possible
+  try {
+    const ymlPath = path.join(__dirname, "..", "electron-builder.yml");
+    const ymlContent = fs.readFileSync(ymlPath, "utf-8");
+    const match = ymlContent.match(/^\s*output:\s*(.+)/m);
+    if (match) {
+      const ebDir = match[1].trim();
+      const ebExe = path.join(__dirname, "..", ebDir, "win-unpacked", "mdpad.exe");
+      if (fs.existsSync(ebExe)) return ebExe;
+    }
+  } catch {}
+
+  const candidates = ["build22", "build21", "build20", "build19", "build18", "build17", "build16", "build15", "build14", "build13", "build12", "build11", "build10", "build9", "build8", "build7", "build6", "build5", "build4", "build3", "build2", "build"].map(
     (d) => path.join(__dirname, "..", d, "win-unpacked", "mdpad.exe")
   );
   for (const p of candidates) {

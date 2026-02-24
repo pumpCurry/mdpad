@@ -104,6 +104,10 @@ function createMenu(_mainWindow) {
           label: t("menu.file_restoreBackup"),
           click: () => sendToTarget("menu:action", "restoreBackup"),
         },
+        {
+          label: t("menu.file_properties"),
+          click: () => sendToTarget("menu:action", "properties"),
+        },
         { type: "separator" },
         {
           label: t("menu.file_exit"),

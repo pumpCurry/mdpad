@@ -21,7 +21,7 @@ import {
   onPaneChange,
 } from "./components/pane-manager.js";
 import { initToolbar, updateButtonStates } from "./components/toolbar.js";
-import { initStatusBar, updateStatusBar, setGitInfo } from "./components/status-bar.js";
+import { initStatusBar, updateStatusBar, setGitInfo, setEolDisplay } from "./components/status-bar.js";
 import { initGlobalSearch, triggerGlobalSearchUpdate, isDndInsertMode } from "./components/global-search.js";
 import { syncEditorToPreview } from "./lib/scroll-sync.js";
 import { initI18n, t, setLocale, onLocaleChange } from "../i18n/i18n-renderer.js";
@@ -31,6 +31,7 @@ let currentFilePath = null;
 let originalContent = "";
 let isDirty = false;
 let suppressDirty = false; // Suppress isDirty changes during programmatic setContent
+let currentEol = navigator.platform.startsWith("Win") ? "CRLF" : "LF"; // Current line ending type
 
 // Session auto-save interval (ms) — lightweight, always on
 const SESSION_SAVE_INTERVAL = 5000;
@@ -119,6 +120,9 @@ async function init() {
   // Status bar click → Go to Line
   window.addEventListener("mdpad:goToLine", () => showGoToLineDialog());
 
+  // Status bar click → EOL selection menu
+  window.addEventListener("mdpad:showEolMenu", (e) => showEolMenu(e.detail.target));
+
   // Expose close-state getter for main process (via executeJavaScript)
   window.__mdpadGetCloseState = () => ({
     isDirty,
@@ -128,6 +132,9 @@ async function init() {
 
   // Expose content getter for main process save-on-close
   window.__mdpadGetContent = () => getContent();
+
+  // Expose currentEol getter for main process save-on-close
+  window.__mdpadGetCurrentEol = () => currentEol;
 
   // Expose currentFilePath getter for preview-pane git diff
   window.__mdpadGetCurrentFilePath = () => currentFilePath;
@@ -345,6 +352,9 @@ async function handleMenuAction(action) {
       break;
     case "restoreBackup":
       showRestoreFromBackupMenu();
+      break;
+    case "properties":
+      showPropertiesDialog();
       break;
     case "about":
       showAboutDialog();
@@ -703,6 +713,8 @@ async function newFile() {
   currentFilePath = null;
   originalContent = "";
   isDirty = false;
+  currentEol = navigator.platform.startsWith("Win") ? "CRLF" : "LF";
+  setEolDisplay(currentEol);
   setContentClean("");
   setOriginalContent("");
   setPreviewBaseDir(null);
@@ -733,6 +745,10 @@ async function openFile() {
   currentFilePath = result.path;
   originalContent = result.content;
   isDirty = false;
+  // Update EOL from detected value; Mixed falls back to OS default
+  const defaultEol = navigator.platform.startsWith("Win") ? "CRLF" : "LF";
+  currentEol = (result.eol && result.eol !== "Mixed") ? result.eol : defaultEol;
+  setEolDisplay(currentEol);
   setContentClean(result.content);
   setOriginalContent(result.content);
   setPreviewBaseDir(result.path);
@@ -751,7 +767,8 @@ async function saveFile() {
     return await saveFileAs();
   }
   const content = getContent();
-  await window.mdpad.saveFile(currentFilePath, content);
+  const contentToWrite = applyEol(content, currentEol);
+  await window.mdpad.saveFile(currentFilePath, contentToWrite);
   originalContent = content;
   setOriginalContent(content);
   isDirty = false;
@@ -765,7 +782,8 @@ async function saveFile() {
 
 async function saveFileAs() {
   const content = getContent();
-  const result = await window.mdpad.saveFileAs(content);
+  const contentToWrite = applyEol(content, currentEol);
+  const result = await window.mdpad.saveFileAs(contentToWrite, currentFilePath);
   if (!result) return false;
   currentFilePath = result.path;
   originalContent = content;
@@ -789,6 +807,9 @@ async function loadFileByPath(filePath) {
   currentFilePath = result.path;
   originalContent = result.content;
   isDirty = false;
+  const defaultEol = navigator.platform.startsWith("Win") ? "CRLF" : "LF";
+  currentEol = (result.eol && result.eol !== "Mixed") ? result.eol : defaultEol;
+  setEolDisplay(currentEol);
   setContentClean(result.content);
   setOriginalContent(result.content);
   setPreviewBaseDir(result.path);
@@ -1526,6 +1547,389 @@ function showCloseDialog(closeState) {
     overlay.remove();
     window.mdpad.sendCloseDialogResult(result);
   }
+}
+
+// --- Properties dialog helpers ---
+
+/**
+ * Convert a Windows path to a WSL path.
+ * e.g. "C:\Users\foo\bar" → "/mnt/c/Users/foo/bar"
+ */
+function toWslPath(winPath) {
+  if (!winPath) return "";
+  // Match drive letter pattern: X:\...
+  const match = winPath.match(/^([A-Za-z]):\\/);
+  if (!match) return winPath.replace(/\\/g, "/");
+  const driveLetter = match[1].toLowerCase();
+  const rest = winPath.substring(3).replace(/\\/g, "/");
+  return `/mnt/${driveLetter}/${rest}`;
+}
+
+/**
+ * Count words in text with CJK support.
+ * CJK characters are counted individually; Western words are space-separated.
+ */
+function countWords(text) {
+  if (!text) return 0;
+  // Count CJK characters (each is one word)
+  const cjkChars = text.match(/[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/g);
+  const cjkCount = cjkChars ? cjkChars.length : 0;
+
+  // Remove CJK characters, then count Western words
+  const withoutCjk = text.replace(/[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/g, " ");
+  const westernWords = withoutCjk.trim().split(/\s+/).filter((w) => w.length > 0);
+  const westernCount = westernWords.length;
+
+  return cjkCount + westernCount;
+}
+
+/**
+ * Format bytes to human-readable file size.
+ */
+function formatFileSize(bytes) {
+  if (bytes == null) return "-";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+/**
+ * Format ISO date string to local date/time.
+ */
+function formatDateLocal(isoStr) {
+  if (!isoStr) return "-";
+  try {
+    return new Date(isoStr).toLocaleString();
+  } catch {
+    return isoStr;
+  }
+}
+
+/**
+ * Show the File Properties dialog.
+ */
+async function showPropertiesDialog() {
+  // Prevent duplicate
+  if (document.getElementById("properties-overlay")) return;
+
+  const content = getContent();
+  const lineCount = content.split("\n").length;
+  const charCount = content.length;
+  const wordCount = countWords(content);
+
+  // Fetch file properties (stat) and git info
+  let fileProps = null;
+  let gitInfo = null;
+  if (currentFilePath) {
+    [fileProps, gitInfo] = await Promise.all([
+      window.mdpad.getFileProperties(currentFilePath),
+      window.mdpad.getDetailedGitInfo(currentFilePath),
+    ]);
+  }
+
+  const overlay = document.createElement("div");
+  overlay.id = "properties-overlay";
+  overlay.style.cssText =
+    "position:fixed;top:0;left:0;right:0;bottom:0;" +
+    "background:rgba(0,0,0,0.3);z-index:9999;" +
+    "display:flex;align-items:flex-start;justify-content:center;padding-top:8vh;";
+
+  const dialog = document.createElement("div");
+  dialog.style.cssText =
+    "background:#ffffff;border:1px solid #d0d7de;border-radius:12px;" +
+    "padding:24px 28px;width:540px;max-height:80vh;overflow-y:auto;" +
+    "box-shadow:0 12px 40px rgba(0,0,0,0.18);";
+
+  // Title row with × button
+  const titleRow = document.createElement("div");
+  titleRow.style.cssText = "display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;";
+  const titleEl = document.createElement("div");
+  titleEl.textContent = t("properties.title");
+  titleEl.style.cssText = "font-size:18px;font-weight:700;color:#24292f;";
+  titleRow.appendChild(titleEl);
+  const closeXBtn = document.createElement("button");
+  closeXBtn.textContent = "×";
+  closeXBtn.style.cssText =
+    "border:none;background:transparent;font-size:22px;color:#57606a;" +
+    "cursor:pointer;padding:0 4px;line-height:1;";
+  closeXBtn.onclick = () => close();
+  titleRow.appendChild(closeXBtn);
+  dialog.appendChild(titleRow);
+
+  // --- Section: General ---
+  const fileName = currentFilePath ? currentFilePath.split(/[\\/]/).pop() : t("app.untitled");
+
+  addSection(dialog, null); // no section header for general
+
+  const generalRows = [
+    { label: t("properties.filename"), value: fileName, copy: true },
+    { label: t("properties.fileSize"), value: fileProps ? formatFileSize(fileProps.size) : "-" },
+    { label: t("properties.created"), value: fileProps ? formatDateLocal(fileProps.created) : "-" },
+    { label: t("properties.modified"), value: fileProps ? formatDateLocal(fileProps.modified) : "-" },
+    { label: t("properties.chars"), value: charCount.toLocaleString() },
+    { label: t("properties.words"), value: wordCount.toLocaleString() },
+    { label: t("properties.linesCount"), value: lineCount.toLocaleString() },
+    { label: t("properties.encoding"), value: "UTF-8" },
+    { label: t("properties.eol"), value: currentEol },
+  ];
+
+  const generalTable = createPropTable(generalRows);
+  dialog.appendChild(generalTable);
+
+  // --- Section: Paths (only for saved files) ---
+  if (currentFilePath) {
+    addSection(dialog, t("properties.sectionPaths"));
+
+    const dirPath = currentFilePath.replace(/[\\/][^\\/]+$/, "");
+    const wslPath = toWslPath(currentFilePath);
+    const wslDir = toWslPath(dirPath);
+
+    const pathRows = [
+      { label: t("properties.directory"), value: dirPath, copy: true },
+      { label: t("properties.fullPath"), value: currentFilePath, copy: true },
+    ];
+
+    // Add git relative path if available
+    if (gitInfo && gitInfo.relPath) {
+      pathRows.push({ label: t("properties.relativePath"), value: gitInfo.relPath, copy: true });
+    }
+
+    pathRows.push({ label: t("properties.wslPath"), value: wslPath, copy: true });
+
+    const pathTable = createPropTable(pathRows);
+    dialog.appendChild(pathTable);
+  } else {
+    addSection(dialog, t("properties.sectionPaths"));
+    const noFileEl = document.createElement("div");
+    noFileEl.textContent = t("properties.unsavedFile");
+    noFileEl.style.cssText = "font-size:13px;color:#8b949e;padding:8px 0;font-style:italic;";
+    dialog.appendChild(noFileEl);
+  }
+
+  // --- Section: Git ---
+  addSection(dialog, t("properties.sectionGit"));
+
+  if (gitInfo) {
+    const gitRows = [
+      { label: t("properties.gitRepo"), value: gitInfo.repoName },
+      { label: t("properties.gitBranch"), value: gitInfo.branch },
+      { label: t("properties.gitCommitHash"), value: gitInfo.commitHash, copy: true, mono: true },
+      { label: t("properties.gitCommitCount"), value: String(gitInfo.commitCount) },
+      { label: t("properties.gitTracked"), value: gitInfo.isTracked ? t("properties.gitYes") : t("properties.gitNo") },
+    ];
+    if (gitInfo.remoteUrl) {
+      gitRows.push({ label: t("properties.gitRemoteUrl"), value: gitInfo.remoteUrl, copy: true });
+    }
+    if (gitInfo.relPath) {
+      gitRows.push({ label: t("properties.gitRelPath"), value: gitInfo.relPath, copy: true });
+    }
+    const gitTable = createPropTable(gitRows);
+    dialog.appendChild(gitTable);
+  } else {
+    const noGitEl = document.createElement("div");
+    noGitEl.textContent = t("properties.noGit");
+    noGitEl.style.cssText = "font-size:13px;color:#8b949e;padding:8px 0;font-style:italic;";
+    dialog.appendChild(noGitEl);
+  }
+
+  // --- Close button ---
+  const btnRow = document.createElement("div");
+  btnRow.style.cssText = "display:flex;justify-content:flex-end;margin-top:16px;";
+  const closeBtn = document.createElement("button");
+  closeBtn.textContent = t("properties.close");
+  closeBtn.style.cssText =
+    "padding:6px 24px;border:1px solid #d0d7de;border-radius:6px;" +
+    "background:#f6f8fa;cursor:pointer;font-size:13px;color:#24292f;" +
+    "transition:background 0.15s;";
+  closeBtn.onmouseover = () => { closeBtn.style.background = "#e8ebef"; };
+  closeBtn.onmouseout = () => { closeBtn.style.background = "#f6f8fa"; };
+  closeBtn.onclick = () => close();
+  btnRow.appendChild(closeBtn);
+  dialog.appendChild(btnRow);
+
+  overlay.appendChild(dialog);
+  document.body.appendChild(overlay);
+  closeBtn.focus();
+
+  // Keyboard & click-outside
+  overlay.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { e.preventDefault(); close(); }
+  });
+  overlay.addEventListener("mousedown", (e) => {
+    if (e.target === overlay) close();
+  });
+
+  function close() {
+    overlay.remove();
+    focus();
+  }
+}
+
+/**
+ * Add a section header to the properties dialog.
+ */
+function addSection(container, title) {
+  if (!title) return; // No header for first section
+  const header = document.createElement("div");
+  header.textContent = title;
+  header.style.cssText =
+    "font-size:14px;font-weight:600;color:#24292f;margin-top:16px;margin-bottom:8px;" +
+    "padding-top:12px;border-top:1px solid #d8dee4;";
+  container.appendChild(header);
+}
+
+/**
+ * Create a property table from rows.
+ * Each row: { label, value, copy?, mono? }
+ */
+function createPropTable(rows) {
+  const table = document.createElement("div");
+  table.style.cssText = "display:grid;grid-template-columns:140px 1fr auto;gap:4px 8px;align-items:center;";
+
+  for (const row of rows) {
+    // Label
+    const labelEl = document.createElement("div");
+    labelEl.textContent = row.label;
+    labelEl.style.cssText = "font-size:13px;color:#57606a;font-weight:500;padding:3px 0;";
+    table.appendChild(labelEl);
+
+    // Value
+    const valueEl = document.createElement("div");
+    valueEl.textContent = row.value || "-";
+    valueEl.style.cssText =
+      "font-size:13px;color:#24292f;padding:3px 0;overflow:hidden;text-overflow:ellipsis;" +
+      "white-space:nowrap;" +
+      (row.mono ? "font-family:'SF Mono',Consolas,'Liberation Mono',Menlo,monospace;font-size:12px;" : "");
+    valueEl.title = row.value || "";
+    table.appendChild(valueEl);
+
+    // Copy button (or empty spacer)
+    if (row.copy) {
+      const copyBtn = document.createElement("button");
+      copyBtn.textContent = t("properties.copy");
+      copyBtn.style.cssText =
+        "padding:2px 8px;border:1px solid #d0d7de;border-radius:4px;" +
+        "background:#f6f8fa;cursor:pointer;font-size:11px;color:#57606a;" +
+        "white-space:nowrap;transition:background 0.15s;";
+      copyBtn.onmouseover = () => { copyBtn.style.background = "#e8ebef"; };
+      copyBtn.onmouseout = () => { copyBtn.style.background = "#f6f8fa"; };
+      copyBtn.onclick = () => {
+        navigator.clipboard.writeText(row.value || "").then(() => {
+          copyBtn.textContent = t("properties.copied");
+          copyBtn.style.color = "#2da44e";
+          setTimeout(() => {
+            copyBtn.textContent = t("properties.copy");
+            copyBtn.style.color = "#57606a";
+          }, 1500);
+        });
+      };
+      table.appendChild(copyBtn);
+    } else {
+      const spacer = document.createElement("div");
+      table.appendChild(spacer);
+    }
+  }
+
+  return table;
+}
+
+// --- EOL helpers ---
+
+/**
+ * Convert content from CodeMirror's internal LF to the specified EOL type.
+ * CodeMirror normalizes all line endings to LF internally.
+ */
+function applyEol(content, eolType) {
+  // First normalize to LF (in case of any mixed content)
+  const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  if (eolType === "CRLF") return normalized.replace(/\n/g, "\r\n");
+  if (eolType === "CR") return normalized.replace(/\n/g, "\r");
+  return normalized; // LF — already done
+}
+
+/**
+ * Show a popup menu for EOL selection above the status bar EOL element.
+ */
+function showEolMenu(targetEl) {
+  // Remove existing popup
+  const existing = document.getElementById("eol-popup");
+  if (existing) { existing.remove(); return; }
+
+  const popup = document.createElement("div");
+  popup.id = "eol-popup";
+  popup.style.cssText =
+    "position:fixed;z-index:9999;background:#ffffff;border:1px solid #d0d7de;" +
+    "border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.15);padding:4px 0;" +
+    "min-width:100px;";
+
+  const options = [
+    { label: "LF", value: "LF", desc: "Unix / macOS" },
+    { label: "CRLF", value: "CRLF", desc: "Windows" },
+    { label: "CR", value: "CR", desc: "Classic Mac" },
+  ];
+
+  for (const opt of options) {
+    const item = document.createElement("div");
+    item.style.cssText =
+      "padding:6px 16px;cursor:pointer;font-size:13px;color:#24292f;" +
+      "display:flex;align-items:center;gap:8px;white-space:nowrap;";
+    item.onmouseover = () => { item.style.background = "#f6f8fa"; };
+    item.onmouseout = () => { item.style.background = "transparent"; };
+
+    const check = document.createElement("span");
+    check.textContent = opt.value === currentEol ? "✓" : " ";
+    check.style.cssText = "width:14px;font-size:12px;color:#0969da;text-align:center;";
+    item.appendChild(check);
+
+    const label = document.createElement("span");
+    label.textContent = opt.label;
+    label.style.fontWeight = opt.value === currentEol ? "600" : "400";
+    item.appendChild(label);
+
+    const desc = document.createElement("span");
+    desc.textContent = opt.desc;
+    desc.style.cssText = "font-size:11px;color:#8b949e;margin-left:auto;";
+    item.appendChild(desc);
+
+    item.onclick = () => {
+      if (opt.value !== currentEol) {
+        currentEol = opt.value;
+        setEolDisplay(currentEol);
+        isDirty = true;
+        updateTitle();
+      }
+      popup.remove();
+    };
+
+    popup.appendChild(item);
+  }
+
+  document.body.appendChild(popup);
+
+  // Position above the target element
+  const rect = targetEl.getBoundingClientRect();
+  const popupRect = popup.getBoundingClientRect();
+  popup.style.left = `${rect.left + rect.width / 2 - popupRect.width / 2}px`;
+  popup.style.top = `${rect.top - popupRect.height - 4}px`;
+
+  // Close on click outside
+  function closePopup(e) {
+    if (!popup.contains(e.target) && e.target !== targetEl) {
+      popup.remove();
+      document.removeEventListener("mousedown", closePopup);
+    }
+  }
+  setTimeout(() => document.addEventListener("mousedown", closePopup), 0);
+
+  // Close on Escape
+  function onKey(e) {
+    if (e.key === "Escape") {
+      popup.remove();
+      document.removeEventListener("keydown", onKey);
+    }
+  }
+  document.addEventListener("keydown", onKey);
 }
 
 // Start the app

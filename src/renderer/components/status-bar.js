@@ -5,6 +5,7 @@ let statusBarEl = null;
 let updateTimer = null;
 let countdownTimer = null; // 1-second timer for backup countdown
 let gitInfo = null; // { repoName, branch, commitHash, commitCount } or null
+let eolDisplay = "CRLF"; // Current EOL display value
 
 export function initStatusBar() {
   statusBarEl = document.getElementById("status-bar");
@@ -29,12 +30,18 @@ function renderStatusBar() {
     <span id="sb-backup" style="width:150px;text-align:center;flex-shrink:0">${t("statusBar.backupOff")}</span>
     <span id="sb-zoom" style="width:55px;text-align:center;flex-shrink:0">100%</span>
     <span id="sb-encoding" style="width:50px;text-align:center;flex-shrink:0">${t("statusBar.encoding")}</span>
+    <span id="sb-eol" style="width:50px;text-align:center;flex-shrink:0;cursor:pointer" title="${t("eol.title")}">${eolDisplay}</span>
     <span id="sb-filetype" style="width:75px;text-align:center;flex-shrink:0">${t("statusBar.filetype")}</span>
   `;
 
   // Click on cursor info opens Go to Line dialog
   statusBarEl.querySelector("#sb-cursor").addEventListener("click", () => {
     window.dispatchEvent(new CustomEvent("mdpad:goToLine"));
+  });
+
+  // Click on EOL indicator shows EOL selection popup
+  statusBarEl.querySelector("#sb-eol").addEventListener("click", (e) => {
+    window.dispatchEvent(new CustomEvent("mdpad:showEolMenu", { detail: { target: e.currentTarget } }));
   });
 
   // Update git display if info already available
@@ -126,6 +133,15 @@ function updateGitStatusDisplay() {
 export function setGitInfo(info) {
   gitInfo = info;
   updateGitStatusDisplay();
+}
+
+export function setEolDisplay(eolType) {
+  eolDisplay = eolType || "LF";
+  if (!statusBarEl) return;
+  const eolEl = statusBarEl.querySelector("#sb-eol");
+  if (eolEl) {
+    eolEl.textContent = eolDisplay;
+  }
 }
 
 export function updateStatusBar() {
