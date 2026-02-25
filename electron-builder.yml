@@ -3,7 +3,7 @@ productName: mdpad
 copyright: "(C) pumpCurry, 5r4ce2"
 
 directories:
-  output: build24
+  output: build25
 
 files:
   - src/**/*
@@ -12,6 +12,7 @@ files:
   - build-number.json
   - "!**/*.map"
   - "!**/node_modules/**"
+  - "!**/*.tmp.*"
 
 # Don't use asar — our renderer loads CSS files via <link> with relative paths
 asar: false
