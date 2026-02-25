@@ -156,6 +156,9 @@ async function init() {
     });
   };
 
+  // Expose handleMenuAction for smoke tests (CDP can't trigger IPC-based menu actions)
+  window.__mdpadHandleMenuAction = (action) => handleMenuAction(action);
+
   // Session auto-save for crash recovery (lightweight, always on)
   setInterval(() => {
     if (isDirty) {
