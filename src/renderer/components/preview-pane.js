@@ -333,3 +333,21 @@ export function clearGitHeadCache() {
 export function getPreviewElement() {
   return previewContainer;
 }
+
+/**
+ * Set the preview mode externally (e.g. from smart layout).
+ * @param {"preview"|"richDiff"} mode
+ */
+export function setPreviewMode(mode) {
+  previewMode = mode;
+  buildPreviewUI();
+}
+
+/**
+ * Set the diff source externally (e.g. from smart layout).
+ * @param {"history"|"file"|"git"} source
+ */
+export function setDiffSource(source) {
+  diffSource = source;
+  buildPreviewUI();
+}

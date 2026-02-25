@@ -11,7 +11,7 @@ import {
   goToLine,
   getCursorInfo,
 } from "./components/editor-pane.js";
-import { initPreview, updatePreview, updatePreviewImmediate, setOriginalContent, setPreviewBaseDir, setGitAvailable, clearGitHeadCache } from "./components/preview-pane.js";
+import { initPreview, updatePreview, updatePreviewImmediate, setOriginalContent, setPreviewBaseDir, setGitAvailable, clearGitHeadCache, setPreviewMode, setDiffSource } from "./components/preview-pane.js";
 import { initDiff, updateDiff } from "./components/diff-pane.js";
 import {
   initPaneManager,
@@ -166,9 +166,24 @@ async function init() {
     }
   }, SESSION_SAVE_INTERVAL);
 
-  // Initialize autosave (backup) timer
+  // Initialize autosave (backup) settings — timer starts on first edit, not at init
   autosaveMinutes = await window.mdpad.getAutosaveMinutes();
-  startAutosaveTimer();
+
+  // File watching: handle external file changes
+  window.mdpad.onFileChanged(() => {
+    if (!isDirty) {
+      // Not dirty — silently reload
+      reloadCurrentFile();
+    } else {
+      // Dirty — ask user
+      showFileChangedDialog();
+    }
+  });
+
+  // Pane config listener (for external file open smart layout)
+  window.mdpad.onApplyPaneConfig((config) => {
+    applyExternalOpenLayout(config);
+  });
 
   // Check for crash recovery: sessions first, then autosave backups
   // Skip if this window was opened with a file (e.g. drop, file association)
@@ -227,7 +242,12 @@ async function init() {
 
 function onEditorChange(content) {
   if (suppressDirty) return; // Ignore changes during programmatic setContent
+  const wasDirty = isDirty;
   isDirty = true;
+  // Start autosave timer on first edit (false→true transition)
+  if (!wasDirty && !autosaveTimer && autosaveMinutes > 0) {
+    startAutosaveTimer();
+  }
   updateTitle();
 
   const state = getPaneState();
@@ -289,7 +309,12 @@ async function handleMenuAction(action) {
     const minutes = parseInt(action.split(":")[1], 10);
     autosaveMinutes = minutes;
     await window.mdpad.setAutosaveMinutes(minutes);
-    startAutosaveTimer();
+    // If currently dirty, start/restart the timer; otherwise stop it
+    if (isDirty && minutes > 0) {
+      startAutosaveTimer();
+    } else {
+      stopAutosaveTimer();
+    }
     return;
   }
 
@@ -721,6 +746,8 @@ async function newFile() {
   setContentClean("");
   setOriginalContent("");
   setPreviewBaseDir(null);
+  stopAutosaveTimer();
+  stopFileWatch();
   updateTitle();
   await window.mdpad.clearSession();
   await window.mdpad.clearAutosaveBackup();
@@ -755,6 +782,8 @@ async function openFile() {
   setContentClean(result.content);
   setOriginalContent(result.content);
   setPreviewBaseDir(result.path);
+  stopAutosaveTimer();
+  startFileWatch(result.path);
   updateTitle();
   await window.mdpad.clearSession();
   await window.mdpad.clearAutosaveBackup();
@@ -771,7 +800,10 @@ async function saveFile() {
   }
   const content = getContent();
   const contentToWrite = applyEol(content, currentEol);
+  // Self-write protection: ignore file watcher events during save
+  await window.mdpad.setFileIgnoring(true);
   await window.mdpad.saveFile(currentFilePath, contentToWrite);
+  setTimeout(() => window.mdpad.setFileIgnoring(false), 1000);
   originalContent = content;
   setOriginalContent(content);
   isDirty = false;
@@ -788,6 +820,9 @@ async function saveFileAs() {
   const contentToWrite = applyEol(content, currentEol);
   const result = await window.mdpad.saveFileAs(contentToWrite, currentFilePath);
   if (!result) return false;
+  // Self-write protection: ignore file watcher events during save
+  await window.mdpad.setFileIgnoring(true);
+  setTimeout(() => window.mdpad.setFileIgnoring(false), 1000);
   currentFilePath = result.path;
   originalContent = content;
   setOriginalContent(content);
@@ -798,6 +833,8 @@ async function saveFileAs() {
   await window.mdpad.clearAutosaveBackup();
   await window.mdpad.invalidateGitCache(currentFilePath);
   refreshGitInfo();
+  // Start watching the new file path
+  startFileWatch(result.path);
   return true;
 }
 
@@ -816,6 +853,8 @@ async function loadFileByPath(filePath) {
   setContentClean(result.content);
   setOriginalContent(result.content);
   setPreviewBaseDir(result.path);
+  stopAutosaveTimer();
+  startFileWatch(result.path);
   updateTitle();
   await window.mdpad.clearSession();
   await window.mdpad.clearAutosaveBackup();
@@ -946,6 +985,123 @@ function saveSessionState() {
   }
 }
 
+// --- File watching ---
+
+async function startFileWatch(filePath) {
+  await window.mdpad.unwatchFile(); // Stop any previous watch
+  if (filePath) {
+    await window.mdpad.watchFile(filePath);
+  }
+}
+
+async function stopFileWatch() {
+  await window.mdpad.unwatchFile();
+}
+
+/**
+ * Reload the current file from disk (used when external change detected).
+ */
+async function reloadCurrentFile() {
+  if (!currentFilePath) return;
+  const result = await window.mdpad.openFileByPath(currentFilePath);
+  if (!result) return;
+
+  originalContent = result.content;
+  isDirty = false;
+  const defaultEol = navigator.platform.startsWith("Win") ? "CRLF" : "LF";
+  currentEol = (result.eol && result.eol !== "Mixed") ? result.eol : defaultEol;
+  setEolDisplay(currentEol);
+  setContentClean(result.content);
+  setOriginalContent(result.content);
+  stopAutosaveTimer();
+  updateTitle();
+
+  const state = getPaneState();
+  if (state.preview) updatePreviewImmediate(result.content);
+  if (state.diff) updateDiff(result.content, originalContent);
+
+  // Re-fetch git info (file may have changed in repo)
+  await window.mdpad.invalidateGitCache(currentFilePath);
+  clearGitHeadCache();
+  refreshGitInfo();
+
+  triggerGlobalSearchUpdate();
+}
+
+/**
+ * Show a dialog when file changes externally while user has unsaved edits.
+ */
+function showFileChangedDialog() {
+  // Prevent duplicate
+  if (document.getElementById("file-changed-overlay")) return;
+
+  const overlay = document.createElement("div");
+  overlay.id = "file-changed-overlay";
+  overlay.style.cssText =
+    "position:fixed;top:0;left:0;right:0;bottom:0;" +
+    "background:rgba(0,0,0,0.4);z-index:10000;" +
+    "display:flex;align-items:flex-start;justify-content:center;padding-top:15vh;";
+
+  const modal = document.createElement("div");
+  modal.style.cssText =
+    "background:#ffffff;border:1px solid #d0d7de;border-radius:8px;" +
+    "padding:20px;width:420px;box-shadow:0 8px 24px rgba(0,0,0,0.2);";
+
+  const titleEl = document.createElement("div");
+  titleEl.textContent = t("fileWatch.changed");
+  titleEl.style.cssText = "font-size:16px;font-weight:700;color:#24292f;margin-bottom:8px;";
+  modal.appendChild(titleEl);
+
+  const msgEl = document.createElement("div");
+  msgEl.textContent = t("fileWatch.reloadQuestion");
+  msgEl.style.cssText = "font-size:14px;color:#57606a;margin-bottom:16px;line-height:1.5;";
+  modal.appendChild(msgEl);
+
+  const btnRow = document.createElement("div");
+  btnRow.style.cssText = "display:flex;gap:8px;justify-content:flex-end;";
+
+  const ignoreBtn = document.createElement("button");
+  ignoreBtn.textContent = t("fileWatch.ignore");
+  ignoreBtn.style.cssText =
+    "padding:6px 16px;border:1px solid #d0d7de;border-radius:6px;" +
+    "background:#f6f8fa;cursor:pointer;font-size:13px;";
+  ignoreBtn.onclick = () => { overlay.remove(); focus(); };
+
+  const reloadBtn = document.createElement("button");
+  reloadBtn.textContent = t("fileWatch.reload");
+  reloadBtn.style.cssText =
+    "padding:6px 16px;border:none;border-radius:6px;" +
+    "background:#2da44e;color:#fff;cursor:pointer;font-size:13px;font-weight:600;";
+  reloadBtn.onclick = async () => {
+    overlay.remove();
+    await reloadCurrentFile();
+    focus();
+  };
+
+  btnRow.appendChild(ignoreBtn);
+  btnRow.appendChild(reloadBtn);
+  modal.appendChild(btnRow);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+
+  // Keyboard support
+  overlay.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      overlay.remove();
+      focus();
+    }
+  });
+
+  overlay.addEventListener("mousedown", (e) => {
+    if (e.target === overlay) { overlay.remove(); focus(); }
+  });
+
+  overlay.tabIndex = -1;
+  overlay.focus();
+  reloadBtn.focus();
+}
+
 // --- Autosave (backup) ---
 
 function startAutosaveTimer() {
@@ -968,6 +1124,18 @@ function startAutosaveTimer() {
     // Reset next-at for the next cycle
     autosaveNextAt = Date.now() + intervalMs;
   }, intervalMs);
+}
+
+/**
+ * Stop the autosave timer (e.g. on new file, open file, recovery).
+ * The timer will restart when the user makes the first edit.
+ */
+function stopAutosaveTimer() {
+  if (autosaveTimer) {
+    clearInterval(autosaveTimer);
+    autosaveTimer = null;
+  }
+  autosaveNextAt = 0;
 }
 
 /** Get autosave info for status bar display (exposed via window). */
@@ -1933,6 +2101,60 @@ function showEolMenu(targetEl) {
     }
   }
   document.addEventListener("keydown", onKey);
+}
+
+// --- External file open: smart pane layout ---
+
+/**
+ * Apply pane layout for externally opened files (CLI, file association).
+ * @param {string|object} config - "__smart__" for git-aware auto, or explicit { editor, preview, diff }
+ */
+async function applyExternalOpenLayout(config) {
+  if (typeof config === "object" && config !== null) {
+    // Explicit pane config from --panes or --view CLI args
+    setPaneState(config);
+    updateButtonStates();
+    return;
+  }
+
+  // Smart mode: git-aware layout
+  if (config === "__smart__") {
+    try {
+      if (currentFilePath) {
+        const info = await window.mdpad.getGitInfo(currentFilePath);
+        if (info && info.isTracked) {
+          // Check if there are differences from HEAD
+          const headContent = await window.mdpad.getGitFileContent(currentFilePath);
+          const currentContent = getContent();
+          if (headContent !== null && headContent !== currentContent) {
+            // Has diff → Preview (Rich Diff) + Diff pane, no editor
+            setPaneState({ editor: false, preview: true, diff: true });
+            setPreviewMode("richDiff");
+            setDiffSource("git");
+          } else {
+            // No diff → Preview only
+            setPaneState({ editor: false, preview: true, diff: false });
+          }
+        } else {
+          // Not git-tracked → Preview only
+          setPaneState({ editor: false, preview: true, diff: false });
+        }
+      } else {
+        // No file path (shouldn't happen for external open) → Preview only
+        setPaneState({ editor: false, preview: true, diff: false });
+      }
+    } catch {
+      // Git check failed → Preview only
+      setPaneState({ editor: false, preview: true, diff: false });
+    }
+    updateButtonStates();
+
+    // Update pane content now that layout is set
+    const state = getPaneState();
+    const content = getContent();
+    if (state.preview) updatePreviewImmediate(content);
+    if (state.diff) updateDiff(content, originalContent);
+  }
 }
 
 // Start the app

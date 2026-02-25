@@ -55,6 +55,16 @@ contextBridge.exposeInMainWorld("mdpad", {
   getOrphanedAutosaves: () => ipcRenderer.invoke("autosave:getOrphaned"),
   removeOrphanedBackup: (path) => ipcRenderer.invoke("autosave:removeOrphaned", path),
 
+  // File watching
+  watchFile: (filePath) => ipcRenderer.invoke("file:watch", filePath),
+  unwatchFile: () => ipcRenderer.invoke("file:unwatch"),
+  setFileIgnoring: (flag) => ipcRenderer.invoke("file:setIgnoring", flag),
+  onFileChanged: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on("file:changed", listener);
+    return () => ipcRenderer.removeListener("file:changed", listener);
+  },
+
   // DnD: get file path from File object (Electron 33+ requires webUtils)
   getFilePath: (file) => webUtils.getPathForFile(file),
 
@@ -77,5 +87,12 @@ contextBridge.exposeInMainWorld("mdpad", {
     const listener = (_event, action) => callback(action);
     ipcRenderer.on("menu:action", listener);
     return () => ipcRenderer.removeListener("menu:action", listener);
+  },
+
+  // Pane config (main -> renderer, for external file open)
+  onApplyPaneConfig: (callback) => {
+    const listener = (_event, config) => callback(config);
+    ipcRenderer.on("apply-pane-config", listener);
+    return () => ipcRenderer.removeListener("apply-pane-config", listener);
   },
 });

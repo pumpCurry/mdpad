@@ -5,6 +5,7 @@ const path = require("path");
 const { addRecentFile, getRecentFiles } = require("./recent-files");
 const { t, getLocale } = require("../i18n/i18n-main");
 const { getGitInfo, getGitFileContent, getDetailedGitInfo, invalidateGitCache } = require("./git-utils");
+const { startWatch, stopWatch, setIgnoring } = require("./file-watcher");
 
 let registered = false;
 
@@ -137,6 +138,30 @@ function registerIpcHandlers() {
   // Detailed git info for properties dialog
   ipcMain.handle("git:getDetailedInfo", async (_event, filePath) => {
     return getDetailedGitInfo(filePath);
+  });
+
+  // File watching
+  ipcMain.handle("file:watch", (event, filePath) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return;
+    const windowId = win.__mdpadWindowId;
+    startWatch(windowId, filePath, () => {
+      if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+        win.webContents.send("file:changed");
+      }
+    });
+  });
+
+  ipcMain.handle("file:unwatch", (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return;
+    stopWatch(win.__mdpadWindowId);
+  });
+
+  ipcMain.handle("file:setIgnoring", (event, flag) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return;
+    setIgnoring(win.__mdpadWindowId, flag);
   });
 }
 

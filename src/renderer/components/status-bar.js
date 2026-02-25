@@ -93,8 +93,8 @@ function updateBackupCountdown() {
   }
 
   if (info.nextAt <= 0) {
-    // Timer configured but not started yet
-    backupEl.textContent = t("statusBar.backupNext").replace("{remaining}", `${info.minutes}m 00s`);
+    // Timer configured but not started yet — show "Standby"
+    backupEl.textContent = t("statusBar.backupStandby");
     return;
   }
 

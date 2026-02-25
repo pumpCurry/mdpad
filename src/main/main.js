@@ -16,6 +16,7 @@ const {
   removeOrphanedBackup,
   getAutosaveDir,
 } = require("./autosave-manager");
+const { stopAllWatchers } = require("./file-watcher");
 
 // Explicitly allow multiple instances — no single-instance lock.
 // Each window runs as a separate process via spawnNewInstance().
@@ -36,7 +37,7 @@ function applyEolMain(content, eolType) {
   return normalized; // LF
 }
 
-function createWindow(openFilePath) {
+function createWindow(openFilePath, paneConfig) {
   // Initialize i18n (detects OS locale or stored preference)
   initLocale();
 
@@ -71,6 +72,8 @@ function createWindow(openFilePath) {
     win.webContents.once("did-finish-load", () => {
       if (!win.isDestroyed()) {
         win.webContents.send("menu:action", "dropOpenFile:" + openFilePath);
+        // Send pane config for smart layout (CLI args or smart default)
+        win.webContents.send("apply-pane-config", paneConfig || "__smart__");
       }
     });
   } else {
@@ -543,6 +546,41 @@ function getFileArgFromCommandLine() {
   return null;
 }
 
+/**
+ * Parse --panes= and --view= CLI options for pane layout.
+ * --panes takes precedence over --view.
+ * Returns pane config object or null (use smart default).
+ */
+function parsePaneArgs(argv) {
+  let paneConfig = null;
+  for (const arg of argv) {
+    if (arg.startsWith("--panes=")) {
+      const panes = arg.slice(8).split(",").map((s) => s.trim().toLowerCase());
+      paneConfig = {
+        editor: panes.includes("editor"),
+        preview: panes.includes("preview"),
+        diff: panes.includes("diff"),
+      };
+      // Ensure at least one pane is enabled
+      if (!paneConfig.editor && !paneConfig.preview && !paneConfig.diff) {
+        paneConfig.preview = true;
+      }
+    }
+    if (arg.startsWith("--view=") && !paneConfig) {
+      const view = arg.slice(7).toLowerCase();
+      const map = {
+        "preview": { editor: false, preview: true, diff: false },
+        "editor": { editor: true, preview: false, diff: false },
+        "diff": { editor: false, preview: false, diff: true },
+        "editor+preview": { editor: true, preview: true, diff: false },
+        "all": { editor: true, preview: true, diff: true },
+      };
+      paneConfig = map[view] || null;
+    }
+  }
+  return paneConfig;
+}
+
 // --- CLI: --help / -h / /? / --version / -v ---
 {
   const pkg = require("../../package.json");
@@ -560,12 +598,19 @@ function getFileArgFromCommandLine() {
     console.log("Options:");
     console.log("  --help, -h, /?     Show this help and exit");
     console.log("  --version, -v      Show version and exit");
+    console.log("  --panes=LIST       Panes to show (comma-separated: editor,preview,diff)");
+    console.log("  --view=MODE        Layout preset (preview|editor|diff|editor+preview|all)");
+    console.log("");
+    console.log("  --panes takes precedence over --view. Without either, the app uses");
+    console.log("  git-aware smart defaults when opening a file externally.");
     console.log("");
     console.log("Arguments:");
     console.log("  file               Markdown file to open (.md, .txt, etc.)");
     console.log("");
     console.log("Examples:");
     console.log("  mdpad README.md");
+    console.log("  mdpad --view=preview README.md");
+    console.log("  mdpad --panes=editor,preview README.md");
     console.log("  mdpad --help");
     process.exit(0);
   }
@@ -603,13 +648,17 @@ if (!gotLock) {
       }
     }
 
+    // Parse pane layout args from second instance's argv
+    const paneConfig = parsePaneArgs(argv);
+
     // Create a new window in this process
-    createWindow(filePath);
+    createWindow(filePath, paneConfig);
   });
 
   app.whenReady().then(() => {
     const openFilePath = getFileArgFromCommandLine();
-    createWindow(openFilePath);
+    const paneConfig = parsePaneArgs(process.argv);
+    createWindow(openFilePath, paneConfig);
   });
 }
 
@@ -626,4 +675,5 @@ app.on("activate", () => {
 // Handle OS-level force quit (e.g. Ctrl+C, SIGTERM)
 app.on("before-quit", () => {
   forceQuit = true;
+  stopAllWatchers();
 });

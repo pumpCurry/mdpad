@@ -88,6 +88,7 @@
     "encoding": "UTF-8",
     "filetype": "Markdown",
     "backupOff": "バックアップ: OFF",
+    "backupStandby": "バックアップ: 待機中",
     "backupNext": "バックアップ: {remaining}",
     "gitRepo": "リポジトリ",
     "gitBranch": "ブランチ",
@@ -204,5 +205,11 @@
     "unsavedFile": "（未保存ファイル）",
     "noGit": "（Git管理外）",
     "close": "閉じる"
+  },
+  "fileWatch": {
+    "changed": "ファイルが外部で変更されました",
+    "reloadQuestion": "ファイルが外部で変更されました。再読み込みしますか？",
+    "reload": "再読み込み",
+    "ignore": "無視"
   }
 }

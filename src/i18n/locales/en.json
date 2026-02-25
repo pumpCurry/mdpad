@@ -88,6 +88,7 @@
     "encoding": "UTF-8",
     "filetype": "Markdown",
     "backupOff": "Backup: OFF",
+    "backupStandby": "Backup: Standby",
     "backupNext": "Backup: {remaining}",
     "gitRepo": "Repository",
     "gitBranch": "Branch",
@@ -204,5 +205,11 @@
     "unsavedFile": "(Unsaved file)",
     "noGit": "(Not under Git management)",
     "close": "Close"
+  },
+  "fileWatch": {
+    "changed": "File Changed Externally",
+    "reloadQuestion": "The file has been modified externally. Do you want to reload it?",
+    "reload": "Reload",
+    "ignore": "Ignore"
   }
 }
