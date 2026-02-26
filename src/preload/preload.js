@@ -65,6 +65,12 @@ contextBridge.exposeInMainWorld("mdpad", {
     return () => ipcRenderer.removeListener("file:changed", listener);
   },
 
+  // File watch settings
+  getFileWatchEnabled: () => ipcRenderer.invoke("fileWatch:getEnabled"),
+  setFileWatchEnabled: (enabled) => ipcRenderer.invoke("fileWatch:setEnabled", enabled),
+  getAutoReloadEnabled: () => ipcRenderer.invoke("fileWatch:getAutoReload"),
+  setAutoReloadEnabled: (enabled) => ipcRenderer.invoke("fileWatch:setAutoReload", enabled),
+
   // DnD: get file path from File object (Electron 33+ requires webUtils)
   getFilePath: (file) => webUtils.getPathForFile(file),
 

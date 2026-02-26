@@ -10,11 +10,14 @@
     "file": "File",
     "file_new": "New",
     "file_open": "Open...",
+    "file_reload": "Reload",
     "file_save": "Save",
     "file_saveAs": "Save As...",
     "file_autosave": "Auto Backup",
     "autosave_off": "OFF",
     "autosave_min": "min",
+    "file_fileWatch": "File Watching",
+    "file_autoReload": "Auto Reload",
     "file_newWindow": "New Window",
     "file_restoreBackup": "Restore from Backup...",
     "file_properties": "Properties...",
@@ -125,12 +128,17 @@
   "diffPane": {
     "editHistory": "Edit History",
     "fileCompare": "File Compare",
+    "vsGit": "vs. Git HEAD",
     "sideBySide": "Side by Side",
     "inline": "Inline",
     "openFile": "Open File...",
     "noChanges": "No changes to display",
     "selectFile": "Select a file to compare",
-    "noChangesDiff": "No changes"
+    "noChangesDiff": "No changes",
+    "loadingGit": "Loading git HEAD content...",
+    "gitNoFile": "Save the file first to compare with git",
+    "gitNoContent": "File not found in git HEAD",
+    "gitError": "Failed to load git HEAD content"
   },
   "previewPane": {
     "preview": "Preview",
@@ -210,6 +218,18 @@
     "changed": "File Changed Externally",
     "reloadQuestion": "The file has been modified externally. Do you want to reload it?",
     "reload": "Reload",
-    "ignore": "Ignore"
+    "ignore": "Ignore",
+    "dirtyMessage": "The file has been modified externally. You have unsaved changes.",
+    "discardReload": "Discard & Reload",
+    "saveReload": "Save & Reload",
+    "ignoreUpdate": "Ignore",
+    "simpleMessage": "The file has been modified externally. Reload?"
+  },
+  "reload": {
+    "title": "Reload File",
+    "message": "You have unsaved changes. How would you like to proceed?",
+    "discardReload": "Discard & Reload",
+    "saveReload": "Save & Reload",
+    "cancel": "Cancel"
   }
 }

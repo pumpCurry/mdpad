@@ -1,6 +1,7 @@
 const { Menu, BrowserWindow } = require("electron");
 const { t, getLocale, setLocale, getSupportedLocales } = require("../i18n/i18n-main");
 const { getAutosaveMinutes } = require("./autosave-manager");
+const { getFileWatchEnabled, getAutoReloadEnabled } = require("./file-watch-settings");
 
 const localeLabels = {
   en: "English",
@@ -36,6 +37,8 @@ function sendToTarget(channel, ...args) {
 function createMenu(_mainWindow) {
   const currentLocale = getLocale();
   const currentAutosave = getAutosaveMinutes();
+  const currentFileWatch = getFileWatchEnabled();
+  const currentAutoReload = getAutoReloadEnabled();
 
   // Build language submenu
   const langSubmenu = getSupportedLocales().map((loc) => ({
@@ -84,6 +87,11 @@ function createMenu(_mainWindow) {
           accelerator: "CmdOrCtrl+O",
           click: () => sendToTarget("menu:action", "open"),
         },
+        {
+          label: t("menu.file_reload"),
+          accelerator: "F5",
+          click: () => sendToTarget("menu:action", "reload"),
+        },
         { type: "separator" },
         {
           label: t("menu.file_save"),
@@ -99,6 +107,22 @@ function createMenu(_mainWindow) {
         {
           label: t("menu.file_autosave"),
           submenu: autosaveSubmenu,
+        },
+        {
+          label: t("menu.file_fileWatch"),
+          type: "checkbox",
+          checked: currentFileWatch,
+          click: (menuItem) => {
+            sendToTarget("menu:action", "setFileWatch:" + (menuItem.checked ? "1" : "0"));
+          },
+        },
+        {
+          label: t("menu.file_autoReload"),
+          type: "checkbox",
+          checked: currentAutoReload,
+          click: (menuItem) => {
+            sendToTarget("menu:action", "setAutoReload:" + (menuItem.checked ? "1" : "0"));
+          },
         },
         {
           label: t("menu.file_restoreBackup"),

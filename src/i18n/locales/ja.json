@@ -10,11 +10,14 @@
     "file": "ファイル",
     "file_new": "新規",
     "file_open": "開く...",
+    "file_reload": "再読み込み",
     "file_save": "保存",
     "file_saveAs": "名前を付けて保存...",
     "file_autosave": "自動バックアップ",
     "autosave_off": "OFF",
     "autosave_min": "分",
+    "file_fileWatch": "ファイル監視",
+    "file_autoReload": "自動再読み込み",
     "file_newWindow": "新しいウィンドウ",
     "file_restoreBackup": "バックアップから復元...",
     "file_properties": "プロパティ...",
@@ -125,12 +128,17 @@
   "diffPane": {
     "editHistory": "編集履歴",
     "fileCompare": "ファイル比較",
+    "vsGit": "Git HEADと比較",
     "sideBySide": "左右並列",
     "inline": "インライン",
     "openFile": "ファイルを開く...",
     "noChanges": "変更はありません",
     "selectFile": "比較するファイルを選択してください",
-    "noChangesDiff": "変更なし"
+    "noChangesDiff": "変更なし",
+    "loadingGit": "Git HEADの内容を読み込み中...",
+    "gitNoFile": "Gitと比較するにはファイルを保存してください",
+    "gitNoContent": "Git HEADにファイルが見つかりません",
+    "gitError": "Git HEADの内容の読み込みに失敗しました"
   },
   "previewPane": {
     "preview": "プレビュー",
@@ -210,6 +218,18 @@
     "changed": "ファイルが外部で変更されました",
     "reloadQuestion": "ファイルが外部で変更されました。再読み込みしますか？",
     "reload": "再読み込み",
-    "ignore": "無視"
+    "ignore": "無視",
+    "dirtyMessage": "ファイルが外部で変更されました。未保存の変更があります。",
+    "discardReload": "変更を破棄して再読み込み",
+    "saveReload": "保存して再読み込み",
+    "ignoreUpdate": "更新せず無視",
+    "simpleMessage": "ファイルが外部で変更されました。再読み込みしますか？"
+  },
+  "reload": {
+    "title": "ファイルの再読み込み",
+    "message": "未保存の変更があります。どうしますか？",
+    "discardReload": "変更を破棄して再読み込み",
+    "saveReload": "保存して再読み込み",
+    "cancel": "キャンセル"
   }
 }

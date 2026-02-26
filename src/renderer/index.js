@@ -12,7 +12,7 @@ import {
   getCursorInfo,
 } from "./components/editor-pane.js";
 import { initPreview, updatePreview, updatePreviewImmediate, setOriginalContent, setPreviewBaseDir, setGitAvailable, clearGitHeadCache, setPreviewMode, setDiffSource } from "./components/preview-pane.js";
-import { initDiff, updateDiff } from "./components/diff-pane.js";
+import { initDiff, updateDiff, setDiffGitAvailable, clearDiffGitHeadCache } from "./components/diff-pane.js";
 import {
   initPaneManager,
   togglePane,
@@ -40,6 +40,10 @@ const SESSION_SAVE_INTERVAL = 5000;
 let autosaveMinutes = 0; // 0 = OFF
 let autosaveTimer = null;
 let autosaveNextAt = 0; // timestamp (ms) of next autosave, 0 = not scheduled
+
+// File watch settings
+let fileWatchEnabled = true;
+let autoReloadEnabled = true;
 
 // Initialize components
 async function init() {
@@ -169,14 +173,23 @@ async function init() {
   // Initialize autosave (backup) settings — timer starts on first edit, not at init
   autosaveMinutes = await window.mdpad.getAutosaveMinutes();
 
+  // Initialize file watch settings
+  fileWatchEnabled = await window.mdpad.getFileWatchEnabled();
+  autoReloadEnabled = await window.mdpad.getAutoReloadEnabled();
+
   // File watching: handle external file changes
   window.mdpad.onFileChanged(() => {
     if (!isDirty) {
-      // Not dirty — silently reload
-      reloadCurrentFile();
+      if (autoReloadEnabled) {
+        // Not dirty + auto-reload ON → silent reload
+        reloadCurrentFile();
+      } else {
+        // Not dirty + auto-reload OFF → simple 2-button dialog
+        showSimpleReloadDialog();
+      }
     } else {
-      // Dirty — ask user
-      showFileChangedDialog();
+      // Dirty → 3-button dialog (discard+reload / save+reload / ignore)
+      showFileChangedDirtyDialog();
     }
   });
 
@@ -304,6 +317,27 @@ async function handleMenuAction(action) {
     return;
   }
 
+  // Handle file watch toggle from menu
+  if (action.startsWith("setFileWatch:")) {
+    const enabled = action.split(":")[1] === "1";
+    fileWatchEnabled = enabled;
+    await window.mdpad.setFileWatchEnabled(enabled);
+    if (!enabled) {
+      stopFileWatch();
+    } else if (currentFilePath) {
+      startFileWatch(currentFilePath);
+    }
+    return;
+  }
+
+  // Handle auto-reload toggle from menu
+  if (action.startsWith("setAutoReload:")) {
+    const enabled = action.split(":")[1] === "1";
+    autoReloadEnabled = enabled;
+    await window.mdpad.setAutoReloadEnabled(enabled);
+    return;
+  }
+
   // Handle autosave interval change from menu
   if (action.startsWith("setAutosave:")) {
     const minutes = parseInt(action.split(":")[1], 10);
@@ -324,6 +358,9 @@ async function handleMenuAction(action) {
       break;
     case "open":
       await openFile();
+      break;
+    case "reload":
+      await handleReload();
       break;
     case "save":
       await saveFile();
@@ -713,17 +750,23 @@ async function refreshGitInfo() {
   if (!currentFilePath) {
     setGitInfo(null);
     setGitAvailable(false);
+    setDiffGitAvailable(false);
     clearGitHeadCache();
+    clearDiffGitHeadCache();
     return;
   }
   try {
     const info = await window.mdpad.getGitInfo(currentFilePath);
     setGitInfo(info);
-    setGitAvailable(!!info && info.isTracked);
+    const tracked = !!info && info.isTracked;
+    setGitAvailable(tracked);
+    setDiffGitAvailable(tracked);
     clearGitHeadCache();
+    clearDiffGitHeadCache();
   } catch {
     setGitInfo(null);
     setGitAvailable(false);
+    setDiffGitAvailable(false);
   }
 }
 
@@ -989,7 +1032,7 @@ function saveSessionState() {
 
 async function startFileWatch(filePath) {
   await window.mdpad.unwatchFile(); // Stop any previous watch
-  if (filePath) {
+  if (filePath && fileWatchEnabled) {
     await window.mdpad.watchFile(filePath);
   }
 }
@@ -1023,15 +1066,176 @@ async function reloadCurrentFile() {
   // Re-fetch git info (file may have changed in repo)
   await window.mdpad.invalidateGitCache(currentFilePath);
   clearGitHeadCache();
+  clearDiffGitHeadCache();
   refreshGitInfo();
 
   triggerGlobalSearchUpdate();
 }
 
 /**
- * Show a dialog when file changes externally while user has unsaved edits.
+ * Handle F5/menu reload action.
+ * If no file is open, do nothing.
+ * If clean, reload immediately.
+ * If dirty, show 3-button dialog.
  */
-function showFileChangedDialog() {
+async function handleReload() {
+  if (!currentFilePath) return;
+  if (!isDirty) {
+    await reloadCurrentFile();
+    return;
+  }
+  // Dirty — show reload confirmation dialog
+  const result = await showReloadConfirmDialog({
+    title: t("reload.title"),
+    message: t("reload.message"),
+    discardLabel: t("reload.discardReload"),
+    saveLabel: t("reload.saveReload"),
+    cancelLabel: t("reload.cancel"),
+    overlayId: "reload-overlay",
+  });
+  if (result === "discard") {
+    // Save backup before discarding
+    await saveResumeBackupNow();
+    await reloadCurrentFile();
+  } else if (result === "save") {
+    const saved = await saveFile();
+    if (saved) {
+      await reloadCurrentFile();
+    }
+  }
+  // "cancel" → do nothing
+  focus();
+}
+
+/**
+ * Save a resume backup of current state (for discard+reload flows).
+ */
+async function saveResumeBackupNow() {
+  try {
+    await window.mdpad.saveResumeBackup({
+      content: getContent(),
+      filePath: currentFilePath,
+      originalContent: originalContent,
+      isDirty: true,
+    });
+  } catch {
+    // Ignore
+  }
+}
+
+/**
+ * Shared 3-button reload confirmation dialog.
+ * Layout: [Discard & Reload] (left, red)  [Cancel/Ignore] (gray)  [Save & Reload] (green)
+ * Returns: Promise<"discard" | "save" | "cancel">
+ */
+function showReloadConfirmDialog({ title, message, discardLabel, saveLabel, cancelLabel, overlayId }) {
+  return new Promise((resolve) => {
+    // Prevent duplicate
+    if (document.getElementById(overlayId)) {
+      resolve("cancel");
+      return;
+    }
+
+    const overlay = document.createElement("div");
+    overlay.id = overlayId;
+    overlay.style.cssText =
+      "position:fixed;top:0;left:0;right:0;bottom:0;" +
+      "background:rgba(0,0,0,0.4);z-index:10000;" +
+      "display:flex;align-items:flex-start;justify-content:center;padding-top:15vh;";
+
+    const modal = document.createElement("div");
+    modal.style.cssText =
+      "background:#ffffff;border:1px solid #d0d7de;border-radius:8px;" +
+      "padding:20px;width:420px;box-shadow:0 8px 24px rgba(0,0,0,0.2);";
+
+    // Title row with x button
+    const titleRow = document.createElement("div");
+    titleRow.style.cssText = "display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;";
+
+    const titleEl = document.createElement("div");
+    titleEl.textContent = title;
+    titleEl.style.cssText = "font-size:16px;font-weight:700;color:#24292f;";
+    titleRow.appendChild(titleEl);
+
+    const closeXBtn = document.createElement("button");
+    closeXBtn.textContent = "\u00d7";
+    closeXBtn.style.cssText =
+      "border:none;background:transparent;font-size:20px;color:#57606a;" +
+      "cursor:pointer;padding:0 4px;line-height:1;";
+    closeXBtn.onclick = () => done("cancel");
+    titleRow.appendChild(closeXBtn);
+    modal.appendChild(titleRow);
+
+    const msgEl = document.createElement("div");
+    msgEl.textContent = message;
+    msgEl.style.cssText = "font-size:14px;color:#57606a;margin-bottom:16px;line-height:1.5;";
+    modal.appendChild(msgEl);
+
+    // Buttons: [Discard] ...space... [Cancel] [Save]
+    const btnRow = document.createElement("div");
+    btnRow.style.cssText = "display:flex;gap:8px;align-items:center;";
+
+    const discardBtn = document.createElement("button");
+    discardBtn.textContent = discardLabel;
+    discardBtn.style.cssText =
+      "padding:6px 16px;border:1px solid #cf222e;border-radius:6px;" +
+      "background:#fff;color:#cf222e;cursor:pointer;font-size:13px;" +
+      "margin-right:auto;";
+    discardBtn.tabIndex = 3;
+    discardBtn.onclick = () => done("discard");
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.textContent = cancelLabel;
+    cancelBtn.style.cssText =
+      "padding:6px 16px;border:1px solid #d0d7de;border-radius:6px;" +
+      "background:#f6f8fa;cursor:pointer;font-size:13px;";
+    cancelBtn.tabIndex = 2;
+    cancelBtn.onclick = () => done("cancel");
+
+    const saveBtn = document.createElement("button");
+    saveBtn.textContent = saveLabel;
+    saveBtn.style.cssText =
+      "padding:6px 16px;border:none;border-radius:6px;" +
+      "background:#2da44e;color:#fff;cursor:pointer;font-size:13px;font-weight:600;";
+    saveBtn.tabIndex = 1;
+    saveBtn.onclick = () => done("save");
+
+    btnRow.appendChild(discardBtn);
+    btnRow.appendChild(cancelBtn);
+    btnRow.appendChild(saveBtn);
+    modal.appendChild(btnRow);
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    // Keyboard support
+    overlay.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        done("cancel");
+      }
+    });
+
+    // Click overlay background → cancel
+    overlay.addEventListener("mousedown", (e) => {
+      if (e.target === overlay) done("cancel");
+    });
+
+    // Focus primary button
+    saveBtn.focus();
+
+    function done(result) {
+      overlay.remove();
+      resolve(result);
+    }
+  });
+}
+
+/**
+ * Show a simple 2-button dialog when file changes externally and auto-reload is OFF.
+ * Used when isDirty === false but autoReloadEnabled === false.
+ */
+function showSimpleReloadDialog() {
   // Prevent duplicate
   if (document.getElementById("file-changed-overlay")) return;
 
@@ -1053,7 +1257,7 @@ function showFileChangedDialog() {
   modal.appendChild(titleEl);
 
   const msgEl = document.createElement("div");
-  msgEl.textContent = t("fileWatch.reloadQuestion");
+  msgEl.textContent = t("fileWatch.simpleMessage");
   msgEl.style.cssText = "font-size:14px;color:#57606a;margin-bottom:16px;line-height:1.5;";
   modal.appendChild(msgEl);
 
@@ -1084,7 +1288,6 @@ function showFileChangedDialog() {
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
 
-  // Keyboard support
   overlay.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       e.preventDefault();
@@ -1100,6 +1303,32 @@ function showFileChangedDialog() {
   overlay.tabIndex = -1;
   overlay.focus();
   reloadBtn.focus();
+}
+
+/**
+ * Show 3-button dialog when file changes externally while user has unsaved edits.
+ * Uses the shared showReloadConfirmDialog with file-watch-specific labels.
+ */
+async function showFileChangedDirtyDialog() {
+  const result = await showReloadConfirmDialog({
+    title: t("fileWatch.changed"),
+    message: t("fileWatch.dirtyMessage"),
+    discardLabel: t("fileWatch.discardReload"),
+    saveLabel: t("fileWatch.saveReload"),
+    cancelLabel: t("fileWatch.ignoreUpdate"),
+    overlayId: "file-changed-overlay",
+  });
+  if (result === "discard") {
+    await saveResumeBackupNow();
+    await reloadCurrentFile();
+  } else if (result === "save") {
+    const saved = await saveFile();
+    if (saved) {
+      await reloadCurrentFile();
+    }
+  }
+  // "cancel" → ignore
+  focus();
 }
 
 // --- Autosave (backup) ---

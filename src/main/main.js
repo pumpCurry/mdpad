@@ -17,6 +17,13 @@ const {
   getAutosaveDir,
 } = require("./autosave-manager");
 const { stopAllWatchers } = require("./file-watcher");
+const {
+  initFileWatchSettings,
+  getFileWatchEnabled,
+  setFileWatchEnabled,
+  getAutoReloadEnabled,
+  setAutoReloadEnabled,
+} = require("./file-watch-settings");
 
 // Explicitly allow multiple instances — no single-instance lock.
 // Each window runs as a separate process via spawnNewInstance().
@@ -312,6 +319,7 @@ function createWindow(openFilePath, paneConfig) {
     registerIpcHandlers();
     initSessionManager();
     initAutosaveManager();
+    initFileWatchSettings();
 
     // IPC: get current locale for renderer
     ipcMain.handle("i18n:getLocale", () => getLocale());
@@ -374,6 +382,18 @@ function createWindow(openFilePath, paneConfig) {
     });
     ipcMain.handle("autosave:removeOrphaned", (_event, backupFilePath) => {
       removeOrphanedBackup(backupFilePath);
+    });
+
+    // IPC: file watch settings
+    ipcMain.handle("fileWatch:getEnabled", () => getFileWatchEnabled());
+    ipcMain.handle("fileWatch:setEnabled", (_event, enabled) => {
+      setFileWatchEnabled(enabled);
+      createMenu(null); // Rebuild menu
+    });
+    ipcMain.handle("fileWatch:getAutoReload", () => getAutoReloadEnabled());
+    ipcMain.handle("fileWatch:setAutoReload", (_event, enabled) => {
+      setAutoReloadEnabled(enabled);
+      createMenu(null); // Rebuild menu
     });
 
     // IPC: open file in a new window (same process, different BrowserWindow)

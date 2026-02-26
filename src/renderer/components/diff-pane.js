@@ -8,10 +8,12 @@ import { t, onLocaleChange } from "../../i18n/i18n-renderer.js";
 let diffContainer = null;
 let toolbarEl = null;
 let contentEl = null;
-let diffMode = "history"; // "history" or "file"
+let diffMode = "history"; // "history", "file", or "git"
 let viewMode = "sideBySide"; // "sideBySide" or "inline"
 let comparisonFileContent = null;
 let comparisonFilePath = null;
+let gitAvailable = false; // whether the current file is in a tracked git repo
+let gitHeadContent = null; // cached HEAD content for git diff
 
 export function initDiff(container) {
   diffContainer = container;
@@ -34,6 +36,7 @@ function renderDiffUI() {
     <select id="diff-mode-select">
       <option value="history" ${diffMode === "history" ? "selected" : ""}>${t("diffPane.editHistory")}</option>
       <option value="file" ${diffMode === "file" ? "selected" : ""}>${t("diffPane.fileCompare")}</option>
+      ${gitAvailable ? `<option value="git" ${diffMode === "git" ? "selected" : ""}>${t("diffPane.vsGit")}</option>` : ""}
     </select>
     <button id="diff-open-file" style="display:none">${t("diffPane.openFile")}</button>
     <span id="diff-file-name" style="display:none;color:#57606a;font-size:11px;"></span>
@@ -98,7 +101,7 @@ function updateFileButtonVisibility() {
   }
 }
 
-export function updateDiff(currentContent, originalContent) {
+export async function updateDiff(currentContent, originalContent) {
   if (!contentEl) return;
 
   let oldText, newText;
@@ -113,6 +116,30 @@ export function updateDiff(currentContent, originalContent) {
       return;
     }
     oldText = comparisonFileContent;
+    newText = currentContent || "";
+  } else if (diffMode === "git") {
+    // Git HEAD comparison
+    if (gitHeadContent === null) {
+      contentEl.innerHTML = `<div class="diff-empty">${t("diffPane.loadingGit")}</div>`;
+      try {
+        const currentPath = typeof window.__mdpadGetCurrentFilePath === "function"
+          ? window.__mdpadGetCurrentFilePath()
+          : null;
+        if (!currentPath) {
+          contentEl.innerHTML = `<div class="diff-empty">${t("diffPane.gitNoFile")}</div>`;
+          return;
+        }
+        gitHeadContent = await window.mdpad.getGitFileContent(currentPath);
+        if (gitHeadContent === null) {
+          contentEl.innerHTML = `<div class="diff-empty">${t("diffPane.gitNoContent")}</div>`;
+          return;
+        }
+      } catch {
+        contentEl.innerHTML = `<div class="diff-empty">${t("diffPane.gitError")}</div>`;
+        return;
+      }
+    }
+    oldText = gitHeadContent;
     newText = currentContent || "";
   }
 
@@ -132,4 +159,25 @@ export function updateDiff(currentContent, originalContent) {
 
 export function getDiffMode() {
   return diffMode;
+}
+
+/**
+ * Set whether git diff is available (file is tracked in a git repo).
+ */
+export function setDiffGitAvailable(available) {
+  const wasAvailable = gitAvailable;
+  gitAvailable = available;
+  if (!available && diffMode === "git") {
+    diffMode = "history";
+  }
+  if (wasAvailable !== available) {
+    renderDiffUI();
+  }
+}
+
+/**
+ * Clear the cached git HEAD content (e.g. on file reload or git change).
+ */
+export function clearDiffGitHeadCache() {
+  gitHeadContent = null;
 }
