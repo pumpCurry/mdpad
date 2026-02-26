@@ -3,6 +3,7 @@ const fs = require("fs/promises");
 const fsSync = require("fs");
 const path = require("path");
 const { addRecentFile, getRecentFiles } = require("./recent-files");
+const { createMenu } = require("./menu");
 const { t, getLocale } = require("../i18n/i18n-main");
 const { getGitInfo, getGitFileContent, getDetailedGitInfo, invalidateGitCache } = require("./git-utils");
 const { startWatch, stopWatch, setIgnoring } = require("./file-watcher");
@@ -33,6 +34,7 @@ function registerIpcHandlers() {
     const filePath = result.filePaths[0];
     const content = await fs.readFile(filePath, "utf-8");
     addRecentFile(filePath);
+    createMenu(null);
     const eol = detectEol(content);
     return { path: filePath, content, eol };
   });
@@ -41,6 +43,7 @@ function registerIpcHandlers() {
     try {
       const content = await fs.readFile(filePath, "utf-8");
       addRecentFile(filePath);
+      createMenu(null);
       const eol = detectEol(content);
       return { path: filePath, content, eol };
     } catch {
@@ -78,6 +81,7 @@ function registerIpcHandlers() {
     if (result.canceled) return null;
     await fs.writeFile(result.filePath, content, "utf-8");
     addRecentFile(result.filePath);
+    createMenu(null);
     return { path: result.filePath };
   });
 

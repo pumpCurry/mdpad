@@ -16,6 +16,8 @@
     "file_autosave": "Auto Backup",
     "autosave_off": "OFF",
     "autosave_min": "min",
+    "file_recent": "Recent Files",
+    "file_recentEmpty": "(empty)",
     "file_fileWatch": "File Watching",
     "file_autoReload": "Auto Reload",
     "file_newWindow": "New Window",

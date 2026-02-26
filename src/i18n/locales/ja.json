@@ -16,6 +16,8 @@
     "file_autosave": "自動バックアップ",
     "autosave_off": "OFF",
     "autosave_min": "分",
+    "file_recent": "最近使ったファイル",
+    "file_recentEmpty": "(なし)",
     "file_fileWatch": "ファイル監視",
     "file_autoReload": "自動再読み込み",
     "file_newWindow": "新しいウィンドウ",

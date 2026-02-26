@@ -317,6 +317,13 @@ async function handleMenuAction(action) {
     return;
   }
 
+  // Handle recent file open from menu
+  if (action.startsWith("openRecent:")) {
+    const filePath = action.substring("openRecent:".length);
+    await openFileInCurrentWindow(filePath);
+    return;
+  }
+
   // Handle file watch toggle from menu
   if (action.startsWith("setFileWatch:")) {
     const enabled = action.split(":")[1] === "1";

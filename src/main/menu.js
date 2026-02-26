@@ -2,6 +2,7 @@ const { Menu, BrowserWindow } = require("electron");
 const { t, getLocale, setLocale, getSupportedLocales } = require("../i18n/i18n-main");
 const { getAutosaveMinutes } = require("./autosave-manager");
 const { getFileWatchEnabled, getAutoReloadEnabled } = require("./file-watch-settings");
+const { getRecentFiles } = require("./recent-files");
 
 const localeLabels = {
   en: "English",
@@ -39,6 +40,16 @@ function createMenu(_mainWindow) {
   const currentAutosave = getAutosaveMinutes();
   const currentFileWatch = getFileWatchEnabled();
   const currentAutoReload = getAutoReloadEnabled();
+
+  // Build recent files submenu
+  const recentFiles = getRecentFiles();
+  const recentSubmenu = recentFiles.length > 0
+    ? recentFiles.map((filePath, i) => ({
+        label: `${i + 1}. ${filePath.split(/[\\/]/).pop()}`,
+        sublabel: filePath,
+        click: () => sendToTarget("menu:action", "openRecent:" + filePath),
+      }))
+    : [{ label: t("menu.file_recentEmpty"), enabled: false }];
 
   // Build language submenu
   const langSubmenu = getSupportedLocales().map((loc) => ({
@@ -124,6 +135,11 @@ function createMenu(_mainWindow) {
             sendToTarget("menu:action", "setAutoReload:" + (menuItem.checked ? "1" : "0"));
           },
         },
+        {
+          label: t("menu.file_recent"),
+          submenu: recentSubmenu,
+        },
+        { type: "separator" },
         {
           label: t("menu.file_restoreBackup"),
           click: () => sendToTarget("menu:action", "restoreBackup"),
