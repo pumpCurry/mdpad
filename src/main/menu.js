@@ -284,6 +284,11 @@ function createMenu(_mainWindow) {
       label: t("menu.help"),
       submenu: [
         {
+          label: t("menu.help_checkForUpdates"),
+          click: () => sendToTarget("menu:action", "checkForUpdates"),
+        },
+        { type: "separator" },
+        {
           label: t("menu.help_about"),
           click: () => sendToTarget("menu:action", "about"),
         },

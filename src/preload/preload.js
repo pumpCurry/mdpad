@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld("mdpad", {
 
   // App version info
   getVersionInfo: () => ipcRenderer.invoke("app:getVersionInfo"),
+  checkForUpdates: () => ipcRenderer.invoke("app:checkForUpdates"),
 
   // i18n
   getLocale: () => ipcRenderer.invoke("i18n:getLocale"),
