@@ -36,6 +36,7 @@ import { lintKeymap } from "@codemirror/lint";
 import { highlightSelectionMatches } from "@codemirror/search";
 import { t } from "../../i18n/i18n-renderer.js";
 import { rectSelectExtension } from "./rect-select.js";
+import { getFormatKeymap } from "./format-commands.js";
 
 const wrapCompartment = new Compartment();
 const closeBracketsCompartment = new Compartment();
@@ -485,6 +486,7 @@ export function createEditor(container, onChange) {
     search(),
     EditorState.phrases.of(getSearchPhrases()),
     keymap.of([indentWithTab]),
+    getFormatKeymap(),
     wrapCompartment.of(EditorView.lineWrapping),
     rulerPlugin(80),
     horizontalRulerPlugin(),

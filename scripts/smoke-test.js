@@ -61,7 +61,7 @@ function resolveExePath() {
     }
   } catch {}
 
-  const candidates = ["build26", "build25", "build24", "build23", "build22", "build21", "build20", "build19", "build18", "build17", "build16", "build15", "build14", "build13", "build12", "build11", "build10", "build9", "build8", "build7", "build6", "build5", "build4", "build3", "build2", "build"].map(
+  const candidates = ["build28", "build27", "build26", "build25", "build24", "build23", "build22", "build21", "build20", "build19", "build18", "build17", "build16", "build15", "build14", "build13", "build12", "build11", "build10", "build9", "build8", "build7", "build6", "build5", "build4", "build3", "build2", "build"].map(
     (d) => path.join(__dirname, "..", d, "win-unpacked", "mdpad.exe")
   );
   for (const p of candidates) {

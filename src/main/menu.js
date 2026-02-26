@@ -229,6 +229,27 @@ function createMenu(_mainWindow) {
         },
         { type: "separator" },
         {
+          label: t("menu.view_formatBar"),
+          submenu: [
+            {
+              label: t("menu.view_formatBar_topbar"),
+              type: "radio",
+              click: () => sendToTarget("menu:action", "setFormatBar:topbar"),
+            },
+            {
+              label: t("menu.view_formatBar_sidebar"),
+              type: "radio",
+              click: () => sendToTarget("menu:action", "setFormatBar:sidebar"),
+            },
+            {
+              label: t("menu.view_formatBar_hidden"),
+              type: "radio",
+              click: () => sendToTarget("menu:action", "setFormatBar:hidden"),
+            },
+          ],
+        },
+        { type: "separator" },
+        {
           label: t("menu.view_zoomIn"),
           accelerator: "CmdOrCtrl+=",
           role: "zoomIn",

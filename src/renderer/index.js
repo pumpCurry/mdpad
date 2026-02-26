@@ -25,6 +25,9 @@ import { initStatusBar, updateStatusBar, setGitInfo, setEolDisplay } from "./com
 import { initGlobalSearch, triggerGlobalSearchUpdate, isDndInsertMode } from "./components/global-search.js";
 import { syncEditorToPreview } from "./lib/scroll-sync.js";
 import { initI18n, t, setLocale, onLocaleChange } from "../i18n/i18n-renderer.js";
+import { initFormatContextMenu } from "./components/format-context-menu.js";
+import { initFormatToolbar, setFormatBarMode, getFormatBarMode } from "./components/format-toolbar.js";
+import { initEmojiPicker } from "./components/emoji-picker.js";
 
 // Application state
 let currentFilePath = null;
@@ -60,6 +63,15 @@ async function init() {
   // Init editor
   const editorContainer = document.getElementById("editor-pane");
   createEditor(editorContainer, onEditorChange);
+
+  // Init format context menu (right-click)
+  initFormatContextMenu();
+
+  // Init format toolbar (topbar/sidebar/hidden)
+  initFormatToolbar();
+
+  // Init emoji picker (registers callback with toolbar)
+  initEmojiPicker();
 
   // Init preview
   const previewContainer = document.getElementById("preview-pane");
@@ -342,6 +354,13 @@ async function handleMenuAction(action) {
     const enabled = action.split(":")[1] === "1";
     autoReloadEnabled = enabled;
     await window.mdpad.setAutoReloadEnabled(enabled);
+    return;
+  }
+
+  // Handle format bar mode change from menu
+  if (action.startsWith("setFormatBar:")) {
+    const mode = action.split(":")[1];
+    setFormatBarMode(mode);
     return;
   }
 
