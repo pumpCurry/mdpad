@@ -1,4 +1,4 @@
-appId: com.pumpcurry.mdpad
+appId: jp.542.mdpad
 productName: mdpad
 copyright: "(C) pumpCurry, 5r4ce2"
 
@@ -26,6 +26,8 @@ win:
       arch:
         - x64
   icon: assets/icons/icon.ico
+  legalTrademarks: ""
+  companyName: "5r4ce2"
 
 portable:
   artifactName: "mdpad-${version}-portable.exe"

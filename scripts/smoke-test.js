@@ -1,22 +1,24 @@
 /**
  * EXE Smoke Test for mdpad — Comprehensive Regression Suite
  *
- * 48-step test covering all features:
+ * 59-step test covering all features:
  *
  * Phase 0 — Setup (3 steps)
  * Phase 1 — Recovery modal (2 steps)
- * Phase 2 — Status bar verification (4 steps) [NEW]
- * Phase 3 — Toolbar & pane manager (5 steps) [NEW]
+ * Phase 2 — Status bar verification (4 steps)
+ * Phase 3 — Toolbar & pane manager (5 steps)
  * Phase 4 — Search & Replace (5 steps)
  * Phase 5 — Global search (3 steps)
- * Phase 6 — Edit operations (4 steps) [Enhanced]
- * Phase 7 — Dialogs: close, confirm-save, about, go-to-line (10 steps) [NEW]
- * Phase 8 — Properties dialog (2 steps) [NEW]
- * Phase 9 — EOL selection (2 steps) [NEW]
+ * Phase 6 — Edit operations (4 steps)
+ * Phase 7 — Dialogs: close, confirm-save, about, go-to-line (10 steps)
+ * Phase 8 — Properties dialog (2 steps)
+ * Phase 9 — EOL selection (2 steps)
  * Phase 10 — Confirm-save & title (2 steps)
- * Phase 11 — Diff pane & autosave status (3 steps) [NEW]
- * Phase 12 — Locale switching (2 steps) [NEW]
- * Phase 13 — Cleanup (1 step)
+ * Phase 11 — Diff pane & autosave status (3 steps)
+ * Phase 12 — Locale switching (2 steps)
+ * Phase 13 — Emoji picker (8 steps) [NEW]
+ * Phase 14 — Markdown shortcode rendering (2 steps) [NEW]
+ * Phase 15 — Cleanup (1 step)
  *
  * Usage:
  *   node scripts/smoke-test.js [path-to-exe]
@@ -75,7 +77,7 @@ function resolveExePath() {
 // ---------------------------------------------------------------------------
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let stepNum = 0;
-const totalSteps = 48;
+const totalSteps = 59;
 const results = [];
 let softFailCount = 0;
 
@@ -1218,7 +1220,349 @@ async function main() {
     }
 
     // =====================================================================
-    // Phase 13: Cleanup (Step 48)
+    // Phase 13: Emoji Picker (Steps 49–56) [NEW]
+    // =====================================================================
+
+    // Ensure editor is visible and focused
+    await cdp.evaluate(`
+      (function() {
+        var e = document.getElementById("editor-pane");
+        if (e && e.style.display === "none" && window.__mdpadHandleMenuAction) {
+          window.__mdpadHandleMenuAction("toggleEditor");
+        }
+        var view = window.__mdpadEditor && window.__mdpadEditor();
+        if (view) view.focus();
+      })()
+    `);
+    await sleep(300);
+
+    // Clear editor content for clean test
+    await cdp.evaluate(`
+      (function() {
+        var view = window.__mdpadEditor && window.__mdpadEditor();
+        if (view) {
+          view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "" } });
+        }
+      })()
+    `);
+    await sleep(200);
+
+    stepStart("Opening emoji picker via format toolbar button...");
+    try {
+      // The emoji button in the format toolbar has data-action="emoji"
+      const openResult = await cdp.evaluate(`
+        (function() {
+          // Try format toolbar button first
+          var btn = document.querySelector('[data-action="emoji"]');
+          if (!btn) {
+            // Fallback: try finding by title/text
+            var allBtns = document.querySelectorAll(".ft-btn, .format-toolbar button");
+            for (var b of allBtns) {
+              if (b.title && b.title.toLowerCase().includes("emoji")) { btn = b; break; }
+              if (b.textContent && b.textContent.includes("😀")) { btn = b; break; }
+            }
+          }
+          if (!btn) return "NO_EMOJI_BTN";
+          btn.click();
+          return "CLICKED";
+        })()
+      `);
+      if (openResult === "NO_EMOJI_BTN") throw new Error("Emoji button not found in toolbar");
+      await sleep(500);
+
+      const pickerExists = await cdp.evaluate(`!!document.querySelector(".emoji-picker")`);
+      if (!pickerExists) throw new Error("Emoji picker did not appear");
+      stepOK("Emoji picker opened");
+    } catch (e) {
+      stepSoftFail("Emoji picker open: " + e.message);
+    }
+
+    stepStart("Verifying emoji picker layout (sidebar, grid, status bar)...");
+    try {
+      const layout = await cdp.evaluate(`
+        (function() {
+          var picker = document.querySelector(".emoji-picker");
+          if (!picker) return "NO_PICKER";
+          var sidebar = picker.querySelector(".ep-sidebar");
+          var grid = picker.querySelector(".ep-grid-area");
+          var status = picker.querySelector(".ep-status-bar");
+          var search = picker.querySelector(".ep-search input");
+          var sidebarBtns = sidebar ? sidebar.querySelectorAll(".ep-sidebar-btn").length : 0;
+          var emojiCount = grid ? grid.querySelectorAll(".ep-emoji").length : 0;
+          return "sidebar=" + !!sidebar +
+                 " grid=" + !!grid +
+                 " status=" + !!status +
+                 " search=" + !!search +
+                 " sidebarBtns=" + sidebarBtns +
+                 " emojis=" + emojiCount;
+        })()
+      `);
+      if (layout === "NO_PICKER") throw new Error("Picker not found");
+      if (!layout.includes("sidebar=true")) throw new Error("Missing sidebar: " + layout);
+      if (!layout.includes("grid=true")) throw new Error("Missing grid: " + layout);
+      if (!layout.includes("status=true")) throw new Error("Missing status bar: " + layout);
+      stepOK("Picker layout: " + layout);
+    } catch (e) {
+      stepSoftFail("Picker layout: " + e.message);
+    }
+
+    stepStart("Verifying skin tone button and dropdown...");
+    try {
+      const skinResult = await cdp.evaluate(`
+        (function() {
+          var picker = document.querySelector(".emoji-picker");
+          if (!picker) return "NO_PICKER";
+          var skinBtn = picker.querySelector(".ep-skin-tone-btn");
+          if (!skinBtn) return "NO_SKIN_BTN";
+          skinBtn.click();
+          // Wait a tick for dropdown to appear
+          return new Promise(function(resolve) {
+            setTimeout(function() {
+              var dropdown = picker.querySelector(".ep-skin-tone-dropdown");
+              var options = dropdown ? dropdown.querySelectorAll(".ep-skin-tone-option").length : 0;
+              // Close dropdown by clicking button again
+              skinBtn.click();
+              resolve("dropdown=" + !!dropdown + " options=" + options);
+            }, 200);
+          });
+        })()
+      `);
+      if (!skinResult.includes("dropdown=true")) throw new Error("Skin tone dropdown missing: " + skinResult);
+      if (!skinResult.includes("options=6")) throw new Error("Expected 6 skin tone options: " + skinResult);
+      stepOK("Skin tone: " + skinResult);
+    } catch (e) {
+      stepSoftFail("Skin tone: " + e.message);
+    }
+
+    stepStart("Verifying name mode toggle button...");
+    try {
+      const nameResult = await cdp.evaluate(`
+        (function() {
+          var picker = document.querySelector(".emoji-picker");
+          if (!picker) return "NO_PICKER";
+          var nameBtn = picker.querySelector(".ep-name-mode-btn");
+          if (!nameBtn) return "NO_NAME_BTN";
+          var wasBefore = nameBtn.classList.contains("active");
+          nameBtn.click();
+          var isAfter = nameBtn.classList.contains("active");
+          // Toggle back
+          nameBtn.click();
+          var isReset = nameBtn.classList.contains("active");
+          return "before=" + wasBefore + " after=" + isAfter + " reset=" + isReset;
+        })()
+      `);
+      if (nameResult === "NO_NAME_BTN") throw new Error("Name mode button not found");
+      // After click, should toggle (before=false → after=true)
+      stepOK("Name mode toggle: " + nameResult);
+    } catch (e) {
+      stepSoftFail("Name mode: " + e.message);
+    }
+
+    stepStart("Testing emoji search...");
+    try {
+      const searchResult = await cdp.evaluate(`
+        (function() {
+          var picker = document.querySelector(".emoji-picker");
+          if (!picker) return "NO_PICKER";
+          var input = picker.querySelector(".ep-search input");
+          if (!input) return "NO_INPUT";
+          input.value = "thumbs";
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          return new Promise(function(resolve) {
+            setTimeout(function() {
+              var visibleEmojis = picker.querySelectorAll(".ep-emoji").length;
+              // Clear search
+              input.value = "";
+              input.dispatchEvent(new Event("input", { bubbles: true }));
+              resolve("filtered=" + visibleEmojis);
+            }, 300);
+          });
+        })()
+      `);
+      if (searchResult === "NO_PICKER" || searchResult === "NO_INPUT") throw new Error(searchResult);
+      var filteredCount = parseInt(searchResult.match(/filtered=(\d+)/)?.[1] || "0", 10);
+      if (filteredCount === 0) throw new Error("Search returned 0 results: " + searchResult);
+      stepOK("Emoji search: " + searchResult);
+    } catch (e) {
+      stepSoftFail("Emoji search: " + e.message);
+    }
+
+    stepStart("Clicking an emoji → verify inserted into editor...");
+    try {
+      const insertResult = await cdp.evaluate(`
+        (function() {
+          var picker = document.querySelector(".emoji-picker");
+          if (!picker) return "NO_PICKER";
+          // Find the first emoji button in the grid
+          var firstEmoji = picker.querySelector(".ep-grid-area .ep-emoji");
+          if (!firstEmoji) return "NO_EMOJI";
+          firstEmoji.click();
+          // Picker should close after click
+          return new Promise(function(resolve) {
+            setTimeout(function() {
+              var view = window.__mdpadEditor && window.__mdpadEditor();
+              var content = view ? view.state.doc.toString() : "";
+              var pickerGone = !document.querySelector(".emoji-picker");
+              resolve("content_len=" + content.length + " picker_closed=" + pickerGone);
+            }, 300);
+          });
+        })()
+      `);
+      if (insertResult === "NO_PICKER" || insertResult === "NO_EMOJI") throw new Error(insertResult);
+      if (!insertResult.includes("picker_closed=true")) throw new Error("Picker didn't close: " + insertResult);
+      var contentLen = parseInt(insertResult.match(/content_len=(\d+)/)?.[1] || "0", 10);
+      if (contentLen === 0) throw new Error("No content inserted: " + insertResult);
+      stepOK("Emoji inserted: " + insertResult);
+    } catch (e) {
+      stepSoftFail("Emoji insert: " + e.message);
+    }
+
+    stepStart("Testing shortcode name mode insertion (:shortcode:)...");
+    try {
+      // Open picker again, enable name mode, click an emoji
+      const shortcodeResult = await cdp.evaluate(`
+        (function() {
+          // Re-open picker
+          var btn = document.querySelector('[data-action="emoji"]');
+          if (!btn) {
+            var allBtns = document.querySelectorAll(".ft-btn, .format-toolbar button");
+            for (var b of allBtns) {
+              if (b.title && b.title.toLowerCase().includes("emoji")) { btn = b; break; }
+              if (b.textContent && b.textContent.includes("😀")) { btn = b; break; }
+            }
+          }
+          if (!btn) return "NO_EMOJI_BTN";
+          btn.click();
+          return new Promise(function(resolve) {
+            setTimeout(function() {
+              var picker = document.querySelector(".emoji-picker");
+              if (!picker) { resolve("NO_PICKER"); return; }
+              // Enable name mode
+              var nameBtn = picker.querySelector(".ep-name-mode-btn");
+              if (nameBtn && !nameBtn.classList.contains("active")) nameBtn.click();
+              // Clear editor first
+              var view = window.__mdpadEditor && window.__mdpadEditor();
+              if (view) view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "" } });
+              setTimeout(function() {
+                // Click first emoji in grid
+                var emoji = picker.querySelector(".ep-grid-area .ep-emoji");
+                if (!emoji) { resolve("NO_EMOJI"); return; }
+                emoji.click();
+                setTimeout(function() {
+                  var view2 = window.__mdpadEditor && window.__mdpadEditor();
+                  var content = view2 ? view2.state.doc.toString() : "";
+                  // Name mode should insert :shortcode: format
+                  var hasColon = content.includes(":");
+                  resolve("content=" + JSON.stringify(content) + " hasColon=" + hasColon);
+                }, 300);
+              }, 200);
+            }, 500);
+          });
+        })()
+      `);
+      if (shortcodeResult.includes("NO_")) throw new Error(shortcodeResult);
+      if (!shortcodeResult.includes("hasColon=true")) {
+        stepSoftFail("Shortcode mode may not have inserted :code: format: " + shortcodeResult);
+      } else {
+        stepOK("Shortcode insertion: " + shortcodeResult);
+      }
+    } catch (e) {
+      stepSoftFail("Shortcode insertion: " + e.message);
+    }
+
+    // =====================================================================
+    // Phase 14: Markdown Shortcode Rendering (Steps 57–58) [NEW]
+    // =====================================================================
+    stepStart("Testing :shortcode: rendering in preview...");
+    try {
+      // Set editor content with shortcode emoji
+      await cdp.evaluate(`
+        (function() {
+          var view = window.__mdpadEditor && window.__mdpadEditor();
+          if (view) {
+            view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "Hello :wave: World :rocket:" } });
+          }
+        })()
+      `);
+      // Show preview pane
+      await cdp.evaluate(`
+        (function() {
+          var p = document.getElementById("preview-pane");
+          if (p && p.style.display === "none" && window.__mdpadHandleMenuAction) {
+            window.__mdpadHandleMenuAction("togglePreview");
+          }
+        })()
+      `);
+      await sleep(1500);
+
+      const previewResult = await cdp.evaluate(`
+        (function() {
+          var preview = document.getElementById("preview-pane");
+          if (!preview) return "NO_PREVIEW";
+          var content = preview.textContent || "";
+          // The shortcodes should be rendered as emoji characters, not as :wave: text
+          var hasWaveText = content.includes(":wave:");
+          var hasRocketText = content.includes(":rocket:");
+          // Check for emoji characters (wave = 👋, rocket = 🚀)
+          var hasWaveEmoji = content.includes("\\u{1F44B}") || content.includes("👋");
+          var hasRocketEmoji = content.includes("\\u{1F680}") || content.includes("🚀");
+          return "wave_text=" + hasWaveText + " rocket_text=" + hasRocketText +
+                 " wave_emoji=" + hasWaveEmoji + " rocket_emoji=" + hasRocketEmoji;
+        })()
+      `);
+      if (previewResult === "NO_PREVIEW") throw new Error("Preview pane not found");
+      // Shortcodes should NOT appear as text (they should be rendered)
+      if (previewResult.includes("wave_text=true")) {
+        throw new Error("Shortcode :wave: not rendered: " + previewResult);
+      }
+      stepOK("Shortcode rendering: " + previewResult);
+    } catch (e) {
+      stepSoftFail("Shortcode rendering: " + e.message);
+    }
+
+    stepStart("Testing multiple shortcode types in preview...");
+    try {
+      await cdp.evaluate(`
+        (function() {
+          var view = window.__mdpadEditor && window.__mdpadEditor();
+          if (view) {
+            view.dispatch({
+              changes: {
+                from: 0, to: view.state.doc.length,
+                insert: ":thumbsup: :heart: :smile: :100: :fire:"
+              }
+            });
+          }
+        })()
+      `);
+      await sleep(1500);
+
+      const multiResult = await cdp.evaluate(`
+        (function() {
+          var preview = document.getElementById("preview-pane");
+          if (!preview) return "NO_PREVIEW";
+          var content = preview.textContent || "";
+          // Count how many shortcodes remain as text (not rendered)
+          var unresolvedCount = 0;
+          var codes = ["thumbsup", "heart", "smile", "100", "fire"];
+          for (var c of codes) {
+            if (content.includes(":" + c + ":")) unresolvedCount++;
+          }
+          return "unresolved=" + unresolvedCount + "/5 content_preview=" + content.substring(0, 50);
+        })()
+      `);
+      if (multiResult === "NO_PREVIEW") throw new Error("Preview pane not found");
+      // All 5 should be resolved (0 unresolved)
+      if (!multiResult.includes("unresolved=0/5")) {
+        throw new Error("Some shortcodes not rendered: " + multiResult);
+      }
+      stepOK("Multi-shortcode rendering: " + multiResult);
+    } catch (e) {
+      stepSoftFail("Multi-shortcode: " + e.message);
+    }
+
+    // =====================================================================
+    // Phase 15: Cleanup (Step 59)
     // =====================================================================
     stepStart("Force-closing process and cleaning up...");
     cdp.close();

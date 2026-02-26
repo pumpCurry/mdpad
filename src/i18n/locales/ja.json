@@ -265,5 +265,23 @@
     "kbd": "キーボード入力",
     "escape": "エスケープ",
     "color": "カラー"
+  },
+  "emojiPicker": {
+    "search": "絵文字を検索...",
+    "searchByName": ":名前:で検索...",
+    "skinTone": "肌の色",
+    "nameMode": ":shortcode:で挿入",
+    "recent": "最近使用",
+    "smileys": "スマイリー",
+    "people": "人物",
+    "nature": "動物と自然",
+    "food": "フード",
+    "travel": "旅行と場所",
+    "activities": "アクティビティ",
+    "objects": "オブジェクト",
+    "symbols": "シンボル",
+    "flags": "旗",
+    "noResults": "絵文字が見つかりません",
+    "defaultStatus": "絵文字を選んでください..."
   }
 }

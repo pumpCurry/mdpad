@@ -25,6 +25,12 @@ const {
   setAutoReloadEnabled,
 } = require("./file-watch-settings");
 
+// Set AppUserModelId for Windows taskbar grouping and display name.
+// Must match electron-builder.yml appId. Called before app 'ready'.
+if (process.platform === "win32") {
+  app.setAppUserModelId("jp.542.mdpad");
+}
+
 // Explicitly allow multiple instances — no single-instance lock.
 // Each window runs as a separate process via spawnNewInstance().
 // Do NOT call app.requestSingleInstanceLock() — that would block 2nd+ instances.

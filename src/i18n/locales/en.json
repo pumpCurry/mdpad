@@ -265,5 +265,23 @@
     "kbd": "Keyboard Input",
     "escape": "Escape",
     "color": "Color"
+  },
+  "emojiPicker": {
+    "search": "Search emoji...",
+    "searchByName": "Search by :name:...",
+    "skinTone": "Skin tone",
+    "nameMode": "Insert as :shortcode:",
+    "recent": "Recently Used",
+    "smileys": "Smileys",
+    "people": "People",
+    "nature": "Animals & Nature",
+    "food": "Food & Drink",
+    "travel": "Travel & Places",
+    "activities": "Activities",
+    "objects": "Objects",
+    "symbols": "Symbols",
+    "flags": "Flags",
+    "noResults": "No emoji found",
+    "defaultStatus": "Pick an emoji..."
   }
 }

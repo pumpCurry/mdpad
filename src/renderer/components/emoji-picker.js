@@ -1,103 +1,36 @@
 /**
  * emoji-picker.js
  *
- * Discord-style emoji picker.
- * Opens as a fixed overlay, with search, category tabs, and recently used.
+ * Discord-style emoji picker with:
+ *  - Vertical category sidebar
+ *  - Skin tone selector (6 tones)
+ *  - Hover status bar with :shortcode: names
+ *  - Name search mode (:xxx: input)
  */
 
 import { getEditor } from "./editor-pane.js";
 import { setEmojiButtonCallback } from "./format-toolbar.js";
+import { t } from "../../i18n/i18n-renderer.js";
+import { EMOJI_NAMES, SKIN_TONE_EMOJI, EMOJI_CATEGORIES } from "../data/emoji-names.js";
 
 const RECENT_KEY = "mdpad:recentEmojis";
+const SKIN_TONE_KEY = "mdpad:emojiSkinTone";
 const MAX_RECENT = 24;
 
-let pickerEl = null;
-
-// ─── Emoji Data ──────────────────────────────────────────────────────
-
-const EMOJI_CATEGORIES = [
-  {
-    id: "recent",
-    icon: "\uD83D\uDD52",
-    label: "Recent",
-    emojis: [], // populated dynamically
-  },
-  {
-    id: "smileys",
-    icon: "\uD83D\uDE00",
-    label: "Smileys",
-    emojis: [
-      "\uD83D\uDE00","\uD83D\uDE03","\uD83D\uDE04","\uD83D\uDE01","\uD83D\uDE06","\uD83D\uDE05","\uD83D\uDE02","\uD83E\uDD23",
-      "\uD83D\uDE0A","\uD83D\uDE07","\uD83D\uDE42","\uD83D\uDE43","\uD83D\uDE09","\uD83D\uDE0C","\uD83D\uDE0D","\uD83E\uDD70",
-      "\uD83D\uDE18","\uD83D\uDE17","\uD83D\uDE1A","\uD83D\uDE19","\uD83E\uDD72","\uD83D\uDE0B","\uD83D\uDE1B","\uD83D\uDE1C",
-      "\uD83E\uDD2A","\uD83D\uDE1D","\uD83E\uDD11","\uD83E\uDD17","\uD83E\uDD2D","\uD83E\uDD2B","\uD83E\uDD14","\uD83E\uDD10",
-      "\uD83E\uDD28","\uD83D\uDE10","\uD83D\uDE11","\uD83D\uDE36","\uD83D\uDE0F","\uD83D\uDE12","\uD83D\uDE44","\uD83D\uDE2C",
-      "\uD83D\uDE24","\uD83D\uDE20","\uD83D\uDE21","\uD83E\uDD2C","\uD83D\uDE22","\uD83D\uDE2D","\uD83D\uDE25","\uD83D\uDE30",
-      "\uD83D\uDE28","\uD83D\uDE31","\uD83E\uDD75","\uD83E\uDD76","\uD83D\uDE33","\uD83E\uDD2F","\uD83D\uDE35","\uD83E\uDD74",
-      "\uD83D\uDE34","\uD83D\uDE2A","\uD83D\uDE32","\uD83E\uDD71","\uD83D\uDE37","\uD83E\uDD12","\uD83E\uDD15","\uD83E\uDD22",
-    ],
-  },
-  {
-    id: "gestures",
-    icon: "\uD83D\uDC4D",
-    label: "Gestures",
-    emojis: [
-      "\uD83D\uDC4D","\uD83D\uDC4E","\uD83D\uDC4A","\u270A","\uD83E\uDD1B","\uD83E\uDD1C","\uD83D\uDC4F","\uD83D\uDE4C",
-      "\uD83D\uDC4B","\uD83E\uDD1A","\uD83D\uDC4C","\u270C\uFE0F","\uD83E\uDD1E","\uD83E\uDD1F","\uD83E\uDD18","\uD83D\uDC48",
-      "\uD83D\uDC49","\uD83D\uDC46","\uD83D\uDC47","\u261D\uFE0F","\u270B","\uD83E\uDD1A","\uD83D\uDD90\uFE0F","\uD83E\uDD19",
-      "\uD83D\uDCAA","\uD83D\uDE4F","\u270D\uFE0F","\uD83E\uDD33","\uD83D\uDC85","\uD83D\uDC42","\uD83D\uDC40","\uD83D\uDC41\uFE0F",
-    ],
-  },
-  {
-    id: "nature",
-    icon: "\uD83D\uDC36",
-    label: "Animals",
-    emojis: [
-      "\uD83D\uDC36","\uD83D\uDC31","\uD83D\uDC2D","\uD83D\uDC39","\uD83D\uDC30","\uD83E\uDD8A","\uD83D\uDC3B","\uD83D\uDC3C",
-      "\uD83D\uDC28","\uD83D\uDC2F","\uD83E\uDD81","\uD83D\uDC2E","\uD83D\uDC37","\uD83D\uDC38","\uD83D\uDC35","\uD83D\uDC14",
-      "\uD83D\uDC27","\uD83D\uDC26","\uD83E\uDD85","\uD83E\uDD86","\uD83E\uDD89","\uD83D\uDC1D","\uD83D\uDC1B","\uD83E\uDD8B",
-      "\uD83D\uDC0C","\uD83D\uDC1A","\uD83D\uDC20","\uD83D\uDC1F","\uD83D\uDC2C","\uD83D\uDC33","\uD83D\uDC0A","\uD83E\uDD95",
-      "\uD83C\uDF3A","\uD83C\uDF3B","\uD83C\uDF37","\uD83C\uDF39","\uD83C\uDF3E","\uD83C\uDF32","\uD83C\uDF34","\uD83C\uDF35",
-    ],
-  },
-  {
-    id: "food",
-    icon: "\uD83C\uDF54",
-    label: "Food",
-    emojis: [
-      "\uD83C\uDF4E","\uD83C\uDF4A","\uD83C\uDF4B","\uD83C\uDF4C","\uD83C\uDF49","\uD83C\uDF47","\uD83C\uDF53","\uD83C\uDF51",
-      "\uD83C\uDF52","\uD83C\uDF50","\uD83E\uDD5D","\uD83C\uDF45","\uD83E\uDD51","\uD83C\uDF46","\uD83E\uDD55","\uD83C\uDF3D",
-      "\uD83C\uDF36\uFE0F","\uD83E\uDD52","\uD83E\uDD66","\uD83C\uDF5E","\uD83E\uDD50","\uD83E\uDD56","\uD83E\uDDC0","\uD83C\uDF56",
-      "\uD83C\uDF54","\uD83C\uDF5F","\uD83C\uDF55","\uD83C\uDF2D","\uD83C\uDF2E","\uD83C\uDF2F","\uD83C\uDF73","\uD83C\uDF72",
-      "\uD83C\uDF71","\uD83C\uDF63","\uD83C\uDF5C","\uD83C\uDF5B","\uD83C\uDF5A","\uD83C\uDF59","\uD83C\uDF58","\uD83C\uDF70",
-      "\uD83C\uDF82","\uD83C\uDF67","\uD83C\uDF68","\uD83C\uDF69","\uD83C\uDF6A","\u2615","\uD83C\uDF7A","\uD83C\uDF77",
-    ],
-  },
-  {
-    id: "objects",
-    icon: "\uD83D\uDCBB",
-    label: "Objects",
-    emojis: [
-      "\uD83D\uDCBB","\uD83D\uDCF1","\uD83D\uDCF7","\uD83D\uDCF9","\uD83D\uDCFA","\uD83D\uDD0A","\uD83D\uDCE7","\uD83D\uDCC1",
-      "\uD83D\uDCDD","\uD83D\uDCD6","\uD83D\uDCDA","\uD83D\uDD0D","\uD83D\uDD12","\uD83D\uDD11","\uD83D\uDCA1","\uD83D\uDD27",
-      "\uD83D\uDEE0\uFE0F","\u2699\uFE0F","\uD83D\uDCCC","\uD83D\uDCCE","\u2702\uFE0F","\uD83D\uDCBC","\uD83C\uDFA8","\uD83C\uDFB5",
-      "\uD83C\uDFB6","\uD83C\uDFA4","\uD83C\uDFAC","\uD83C\uDFAE","\uD83D\uDC8E","\uD83D\uDCB0","\uD83C\uDFC6","\u26BD",
-      "\uD83C\uDFC0","\uD83C\uDFBE","\uD83C\uDFB1","\uD83C\uDFAF","\uD83D\uDE80","\u2708\uFE0F","\uD83D\uDE97","\uD83D\uDE82",
-    ],
-  },
-  {
-    id: "symbols",
-    icon: "\u2764\uFE0F",
-    label: "Symbols",
-    emojis: [
-      "\u2764\uFE0F","\uD83E\uDDE1","\uD83D\uDC9B","\uD83D\uDC9A","\uD83D\uDC99","\uD83D\uDC9C","\uD83D\uDDA4","\uD83D\uDC94",
-      "\u2763\uFE0F","\uD83D\uDC95","\uD83D\uDC9E","\uD83D\uDC93","\uD83D\uDC97","\uD83D\uDC96","\uD83D\uDC9D","\u2B50",
-      "\uD83C\uDF1F","\u26A1","\uD83D\uDD25","\u2728","\uD83C\uDF88","\uD83C\uDF89","\uD83C\uDF8A","\u2705","\u274C",
-      "\u2757","\u2753","\u2795","\u2796","\u2716\uFE0F","\u267B\uFE0F","\u267E\uFE0F","\uD83D\uDCAF","\uD83C\uDD99",
-      "\u26A0\uFE0F","\uD83D\uDED1","\uD83D\uDEAB","\u2139\uFE0F","\u2194\uFE0F","\u2195\uFE0F","\u27A1\uFE0F","\u2B05\uFE0F",
-    ],
-  },
+// Skin tone modifiers
+const SKIN_TONES = [
+  { id: "default", modifier: "", label: "\u{1F44D}" },
+  { id: "light", modifier: "\u{1F3FB}", label: "\u{1F44D}\u{1F3FB}" },
+  { id: "medium-light", modifier: "\u{1F3FC}", label: "\u{1F44D}\u{1F3FC}" },
+  { id: "medium", modifier: "\u{1F3FD}", label: "\u{1F44D}\u{1F3FD}" },
+  { id: "medium-dark", modifier: "\u{1F3FE}", label: "\u{1F44D}\u{1F3FE}" },
+  { id: "dark", modifier: "\u{1F3FF}", label: "\u{1F44D}\u{1F3FF}" },
 ];
+
+let pickerEl = null;
+let currentSkinTone = "";
+let nameSearchMode = false;
+let scrollObserver = null;
 
 // ─── Recent Emojis ───────────────────────────────────────────────────
 
@@ -116,15 +49,37 @@ function addRecentEmoji(emoji) {
   localStorage.setItem(RECENT_KEY, JSON.stringify(recent));
 }
 
+// ─── Skin Tone ───────────────────────────────────────────────────────
+
+function getSkinTone() {
+  return localStorage.getItem(SKIN_TONE_KEY) || "";
+}
+
+function setSkinTone(modifier) {
+  currentSkinTone = modifier;
+  localStorage.setItem(SKIN_TONE_KEY, modifier);
+}
+
+/** Strip any existing skin tone modifier from an emoji string. */
+function stripTone(emoji) {
+  return emoji.replace(/[\u{1F3FB}-\u{1F3FF}]/u, "");
+}
+
+/** Apply current skin tone to an emoji if it supports modifiers. */
+function applyTone(emoji) {
+  const base = stripTone(emoji);
+  if (!currentSkinTone) return base;
+  if (!SKIN_TONE_EMOJI.has(base)) return base;
+  return base + currentSkinTone;
+}
+
 // ─── Picker UI ───────────────────────────────────────────────────────
 
 export function initEmojiPicker() {
-  // Register callback with toolbar
   setEmojiButtonCallback((btnEl) => {
     toggleEmojiPicker(btnEl);
   });
 
-  // Close on outside click
   document.addEventListener("mousedown", (e) => {
     if (pickerEl && !pickerEl.contains(e.target) && e.target.id !== "fb-emoji-btn") {
       closeEmojiPicker();
@@ -149,87 +104,149 @@ function toggleEmojiPicker(anchorEl) {
 function openEmojiPicker(anchorEl) {
   closeEmojiPicker();
 
+  currentSkinTone = getSkinTone();
+  nameSearchMode = false;
+
   pickerEl = document.createElement("div");
   pickerEl.className = "emoji-picker";
 
-  // Search bar
+  // ── Header: search + skin tone + name mode ──
+
+  const headerDiv = document.createElement("div");
+  headerDiv.className = "ep-header";
+
+  // Search
   const searchDiv = document.createElement("div");
   searchDiv.className = "ep-search";
   const searchInput = document.createElement("input");
   searchInput.type = "text";
-  searchInput.placeholder = "Search emoji...";
+  searchInput.placeholder = t("emojiPicker.search") || "Search emoji...";
   searchDiv.appendChild(searchInput);
-  pickerEl.appendChild(searchDiv);
+  headerDiv.appendChild(searchDiv);
 
-  // Category tabs
-  const tabsDiv = document.createElement("div");
-  tabsDiv.className = "ep-tabs";
+  // Skin tone button
+  const skinToneBtn = document.createElement("button");
+  skinToneBtn.className = "ep-skin-tone-btn";
+  skinToneBtn.title = t("emojiPicker.skinTone") || "Skin tone";
+  const currentToneObj = SKIN_TONES.find((s) => s.modifier === currentSkinTone) || SKIN_TONES[0];
+  skinToneBtn.textContent = currentToneObj.label;
+  skinToneBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    // Toggle dropdown
+    const existing = pickerEl.querySelector(".ep-skin-tone-dropdown");
+    if (existing) {
+      existing.remove();
+      return;
+    }
+    const dropdown = createSkinToneDropdown(skinToneBtn);
+    skinToneBtn.appendChild(dropdown);
+  });
+  headerDiv.appendChild(skinToneBtn);
+
+  // Name mode toggle - switches insert output between emoji char and :shortcode:
+  const nameModeBtn = document.createElement("button");
+  nameModeBtn.className = "ep-name-mode-btn";
+  nameModeBtn.title = t("emojiPicker.nameMode") || "Insert as :shortcode:";
+  nameModeBtn.textContent = "::";
+  nameModeBtn.addEventListener("click", () => {
+    nameSearchMode = !nameSearchMode;
+    nameModeBtn.classList.toggle("active", nameSearchMode);
+    searchInput.placeholder = nameSearchMode
+      ? (t("emojiPicker.searchByName") || "Search by :name:...")
+      : (t("emojiPicker.search") || "Search emoji...");
+    searchInput.focus();
+  });
+  headerDiv.appendChild(nameModeBtn);
+
+  pickerEl.appendChild(headerDiv);
+
+  // ── Body: sidebar + grid ──
+
+  const bodyDiv = document.createElement("div");
+  bodyDiv.className = "ep-body";
+
+  // Sidebar
+  const sidebarDiv = document.createElement("div");
+  sidebarDiv.className = "ep-sidebar";
 
   EMOJI_CATEGORIES.forEach((cat) => {
-    const tab = document.createElement("button");
-    tab.className = "ep-tab";
-    tab.textContent = cat.icon;
-    tab.title = cat.label;
-    tab.dataset.catId = cat.id;
-    tab.addEventListener("click", () => {
+    const btn = document.createElement("button");
+    btn.className = "ep-sidebar-btn";
+    btn.textContent = (cat.id === "people") ? applyTone(cat.icon) : cat.icon;
+    btn.title = t("emojiPicker." + cat.id) || cat.label;
+    btn.dataset.catId = cat.id;
+    btn.addEventListener("click", () => {
       scrollToCategory(cat.id);
-      setActiveTab(cat.id);
+      setActiveSidebarBtn(cat.id);
     });
-    tabsDiv.appendChild(tab);
+    sidebarDiv.appendChild(btn);
   });
 
-  pickerEl.appendChild(tabsDiv);
+  bodyDiv.appendChild(sidebarDiv);
 
-  // Emoji grid
-  const gridDiv = document.createElement("div");
-  gridDiv.className = "ep-grid";
+  // Grid area
+  const gridArea = document.createElement("div");
+  gridArea.className = "ep-grid-area";
 
   // Populate recent
   EMOJI_CATEGORIES[0].emojis = getRecentEmojis();
 
+  // Status bar references (needed by emoji button builders)
+  const statusEmoji = document.createElement("span");
+  statusEmoji.className = "ep-status-emoji";
+  const statusShortcode = document.createElement("span");
+  statusShortcode.className = "ep-status-shortcode";
+  const statusName = document.createElement("span");
+  statusName.className = "ep-status-name";
+  statusName.textContent = t("emojiPicker.defaultStatus") || "Pick an emoji...";
+
   EMOJI_CATEGORIES.forEach((cat) => {
-    if (cat.id === "recent" && cat.emojis.length === 0) return; // Skip empty recent
+    if (cat.id === "recent" && cat.emojis.length === 0) return;
 
     const section = document.createElement("div");
     section.dataset.catId = cat.id;
 
     const label = document.createElement("div");
     label.className = "ep-category-label";
-    label.textContent = cat.label;
+    label.textContent = t("emojiPicker." + cat.id) || cat.label;
     section.appendChild(label);
 
     const row = document.createElement("div");
     row.className = "ep-emoji-row";
 
     cat.emojis.forEach((emoji) => {
-      const btn = document.createElement("button");
-      btn.className = "ep-emoji";
-      btn.textContent = emoji;
-      btn.title = emoji;
-      btn.addEventListener("click", () => {
-        insertEmoji(emoji);
-        addRecentEmoji(emoji);
-      });
+      const baseEmoji = stripTone(emoji);
+      const btn = createEmojiBtn(baseEmoji, statusEmoji, statusShortcode, statusName);
       row.appendChild(btn);
     });
 
     section.appendChild(row);
-    gridDiv.appendChild(section);
+    gridArea.appendChild(section);
   });
 
-  pickerEl.appendChild(gridDiv);
+  bodyDiv.appendChild(gridArea);
+  pickerEl.appendChild(bodyDiv);
+
+  // ── Status bar ──
+
+  const statusBar = document.createElement("div");
+  statusBar.className = "ep-status-bar";
+  statusBar.appendChild(statusEmoji);
+  statusBar.appendChild(statusShortcode);
+  statusBar.appendChild(statusName);
+  pickerEl.appendChild(statusBar);
+
+  // ── Append to DOM and position ──
 
   document.body.appendChild(pickerEl);
 
-  // Position relative to anchor
   if (anchorEl) {
     const rect = anchorEl.getBoundingClientRect();
     let left = rect.left;
     let top = rect.bottom + 4;
 
-    // Boundary check
-    if (left + 340 > window.innerWidth) left = window.innerWidth - 344;
-    if (top + 360 > window.innerHeight) top = rect.top - 364;
+    if (left + 420 > window.innerWidth) left = window.innerWidth - 424;
+    if (top + 400 > window.innerHeight) top = rect.top - 404;
     if (left < 0) left = 4;
     if (top < 0) top = 4;
 
@@ -237,23 +254,53 @@ function openEmojiPicker(anchorEl) {
     pickerEl.style.top = top + "px";
   }
 
-  // Set first active tab
-  setActiveTab(EMOJI_CATEGORIES[0].emojis.length > 0 ? "recent" : "smileys");
+  // Set initial active sidebar button
+  setActiveSidebarBtn(EMOJI_CATEGORIES[0].emojis.length > 0 ? "recent" : "smileys");
 
-  // Search handler
+  // ── Scroll tracking ──
+
+  setupScrollObserver(gridArea);
+
+  // ── Search handler ──
+
   searchInput.addEventListener("input", () => {
-    filterEmojis(searchInput.value.trim().toLowerCase(), gridDiv);
+    const val = searchInput.value.trim();
+
+    // Exact :shortcode: match -> auto-insert
+    if (val.startsWith(":") && val.endsWith(":") && val.length > 2) {
+      const code = val.slice(1, -1).toLowerCase();
+      for (const [emoji, info] of EMOJI_NAMES) {
+        if (info.shortcode === code) {
+          if (nameSearchMode) {
+            insertEmoji(":" + info.shortcode + ":");
+          } else {
+            insertEmoji(applyTone(emoji));
+          }
+          addRecentEmoji(emoji);
+          closeEmojiPicker();
+          return;
+        }
+      }
+    }
+
+    filterEmojis(val.toLowerCase(), gridArea);
   });
 
   searchInput.focus();
 }
 
 function closeEmojiPicker() {
+  if (scrollObserver) {
+    scrollObserver.disconnect();
+    scrollObserver = null;
+  }
   if (pickerEl) {
     pickerEl.remove();
     pickerEl = null;
   }
 }
+
+// ─── Emoji insertion ─────────────────────────────────────────────────
 
 function insertEmoji(emoji) {
   const view = getEditor();
@@ -267,64 +314,156 @@ function insertEmoji(emoji) {
   view.focus();
 }
 
+// ─── Skin tone dropdown ─────────────────────────────────────────────
+
+function createSkinToneDropdown(skinToneBtn) {
+  const dropdown = document.createElement("div");
+  dropdown.className = "ep-skin-tone-dropdown";
+
+  SKIN_TONES.forEach((tone) => {
+    const opt = document.createElement("button");
+    opt.className = "ep-skin-tone-option";
+    if (tone.modifier === currentSkinTone) opt.classList.add("active");
+    opt.textContent = tone.label;
+    opt.title = tone.id;
+    opt.addEventListener("click", (e) => {
+      e.stopPropagation();
+      setSkinTone(tone.modifier);
+      skinToneBtn.textContent = tone.label;
+      refreshGridTones();
+      // Update people sidebar icon (skin-tone capable)
+      if (pickerEl) {
+        const peopleSidebarBtn = pickerEl.querySelector('.ep-sidebar-btn[data-cat-id="people"]');
+        if (peopleSidebarBtn) {
+          peopleSidebarBtn.textContent = applyTone("\u{1F464}");
+        }
+      }
+      dropdown.remove();
+    });
+    dropdown.appendChild(opt);
+  });
+
+  return dropdown;
+}
+
+function refreshGridTones() {
+  if (!pickerEl) return;
+  const buttons = pickerEl.querySelectorAll(".ep-emoji[data-base-emoji]");
+  buttons.forEach((btn) => {
+    const base = btn.dataset.baseEmoji;
+    btn.textContent = applyTone(base);
+  });
+}
+
+// ─── Sidebar & scroll tracking ───────────────────────────────────────
+
 function scrollToCategory(catId) {
   if (!pickerEl) return;
-  const gridDiv = pickerEl.querySelector(".ep-grid");
-  const section = gridDiv.querySelector(`[data-cat-id="${catId}"]`);
+  const gridArea = pickerEl.querySelector(".ep-grid-area");
+  const section = gridArea.querySelector(`[data-cat-id="${catId}"]`);
   if (section) {
     section.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 }
 
-function setActiveTab(catId) {
+function setActiveSidebarBtn(catId) {
   if (!pickerEl) return;
-  const tabs = pickerEl.querySelectorAll(".ep-tab");
-  tabs.forEach((tab) => {
-    tab.classList.toggle("active", tab.dataset.catId === catId);
+  const btns = pickerEl.querySelectorAll(".ep-sidebar-btn");
+  btns.forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.catId === catId);
   });
 }
 
-function filterEmojis(query, gridDiv) {
+function setupScrollObserver(gridArea) {
+  const sections = gridArea.querySelectorAll("[data-cat-id]");
+  if (sections.length === 0) return;
+
+  scrollObserver = new IntersectionObserver(
+    (entries) => {
+      let topSection = null;
+      let topY = Infinity;
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          const rect = entry.boundingClientRect;
+          if (rect.top < topY) {
+            topY = rect.top;
+            topSection = entry.target;
+          }
+        }
+      });
+      if (topSection) {
+        setActiveSidebarBtn(topSection.dataset.catId);
+      }
+    },
+    {
+      root: gridArea,
+      threshold: 0,
+      rootMargin: "0px 0px -80% 0px",
+    }
+  );
+
+  sections.forEach((section) => scrollObserver.observe(section));
+}
+
+// ─── Search / Filter ─────────────────────────────────────────────────
+
+function filterEmojis(query, gridArea) {
+  // Remove existing search results
+  const existingResults = gridArea.querySelector(".ep-search-results");
+  if (existingResults) existingResults.remove();
+  const existingNoResults = gridArea.querySelector(".ep-no-results");
+  if (existingNoResults) existingNoResults.remove();
+
   if (!query) {
-    // Show all
-    gridDiv.querySelectorAll("[data-cat-id]").forEach((section) => {
+    // Show all category sections
+    gridArea.querySelectorAll("[data-cat-id]").forEach((section) => {
       section.style.display = "";
     });
-    const noResults = gridDiv.querySelector(".ep-no-results");
-    if (noResults) noResults.remove();
     return;
   }
 
-  // Hide all category sections and show a flat filtered grid
-  let found = 0;
-  gridDiv.querySelectorAll("[data-cat-id]").forEach((section) => {
+  // Hide all category sections
+  gridArea.querySelectorAll("[data-cat-id]").forEach((section) => {
     section.style.display = "none";
   });
 
-  // Remove existing no-results
-  const existing = gridDiv.querySelector(".ep-no-results");
-  if (existing) existing.remove();
-
-  // Remove existing search results
-  const existingResults = gridDiv.querySelector(".ep-search-results");
-  if (existingResults) existingResults.remove();
+  // Strip colons for shortcode matching
+  let searchTerm = query;
+  if (searchTerm.startsWith(":")) searchTerm = searchTerm.slice(1);
+  if (searchTerm.endsWith(":")) searchTerm = searchTerm.slice(0, -1);
+  if (!searchTerm) return;
 
   // Build search results
   const resultsDiv = document.createElement("div");
   resultsDiv.className = "ep-search-results";
   const row = document.createElement("div");
   row.className = "ep-emoji-row";
+  let found = 0;
 
-  // Search through all categories (skip recent)
-  const allEmojis = new Set();
+  const seen = new Set();
+
+  // Get status bar references
+  const statusEmoji = pickerEl.querySelector(".ep-status-emoji");
+  const statusShortcode = pickerEl.querySelector(".ep-status-shortcode");
+  const statusName = pickerEl.querySelector(".ep-status-name");
+
   EMOJI_CATEGORIES.forEach((cat) => {
     if (cat.id === "recent") return;
     cat.emojis.forEach((emoji) => {
-      if (!allEmojis.has(emoji)) {
-        allEmojis.add(emoji);
-        // Simple search: check if any character in query matches the emoji
-        // For better search, we'd need a name database, but emoji characters themselves work
-        row.appendChild(createEmojiBtn(emoji));
+      const base = stripTone(emoji);
+      if (seen.has(base)) return;
+      seen.add(base);
+
+      const info = EMOJI_NAMES.get(base);
+      let match = false;
+
+      if (info) {
+        match = info.shortcode.includes(searchTerm) ||
+                info.name.toLowerCase().includes(searchTerm);
+      }
+
+      if (match) {
+        row.appendChild(createEmojiBtn(base, statusEmoji, statusShortcode, statusName));
         found++;
       }
     });
@@ -332,23 +471,56 @@ function filterEmojis(query, gridDiv) {
 
   if (found > 0) {
     resultsDiv.appendChild(row);
-    gridDiv.appendChild(resultsDiv);
+    gridArea.appendChild(resultsDiv);
   } else {
     const noResults = document.createElement("div");
     noResults.className = "ep-no-results";
-    noResults.textContent = "No emoji found";
-    gridDiv.appendChild(noResults);
+    noResults.textContent = t("emojiPicker.noResults") || "No emoji found";
+    gridArea.appendChild(noResults);
   }
 }
 
-function createEmojiBtn(emoji) {
+// ─── Emoji button factory ────────────────────────────────────────────
+
+function createEmojiBtn(baseEmoji, statusEmoji, statusShortcode, statusName) {
   const btn = document.createElement("button");
   btn.className = "ep-emoji";
-  btn.textContent = emoji;
-  btn.title = emoji;
-  btn.addEventListener("click", () => {
-    insertEmoji(emoji);
-    addRecentEmoji(emoji);
+  btn.dataset.baseEmoji = baseEmoji;
+  btn.textContent = applyTone(baseEmoji);
+
+  // Hover -> update status bar
+  btn.addEventListener("mouseenter", () => {
+    const info = EMOJI_NAMES.get(baseEmoji);
+    statusEmoji.textContent = applyTone(baseEmoji);
+    if (info) {
+      statusShortcode.textContent = ":" + info.shortcode + ":";
+      statusName.textContent = info.name;
+    } else {
+      statusShortcode.textContent = "";
+      statusName.textContent = "";
+    }
   });
+
+  btn.addEventListener("mouseleave", () => {
+    statusEmoji.textContent = "";
+    statusShortcode.textContent = "";
+    statusName.textContent = t("emojiPicker.defaultStatus") || "Pick an emoji...";
+  });
+
+  // Click -> insert (emoji char or :shortcode: depending on mode)
+  btn.addEventListener("click", () => {
+    if (nameSearchMode) {
+      const info = EMOJI_NAMES.get(baseEmoji);
+      if (info) {
+        insertEmoji(":" + info.shortcode + ":");
+      } else {
+        insertEmoji(applyTone(baseEmoji));
+      }
+    } else {
+      insertEmoji(applyTone(baseEmoji));
+    }
+    addRecentEmoji(baseEmoji);
+  });
+
   return btn;
 }
