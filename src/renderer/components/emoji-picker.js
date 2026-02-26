@@ -91,6 +91,9 @@ export function initEmojiPicker() {
       closeEmojiPicker();
     }
   });
+
+  // Close when a modal dialog opens
+  window.addEventListener("mdpad:closePopups", () => closeEmojiPicker());
 }
 
 function toggleEmojiPicker(anchorEl) {

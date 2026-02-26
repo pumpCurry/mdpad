@@ -40,6 +40,12 @@ export function initFormatToolbar() {
       closeDropdown();
     }
   });
+
+  // Close all toolbar popups when a modal dialog opens
+  window.addEventListener("mdpad:closePopups", () => {
+    closeDropdown();
+    closeColorPalette();
+  });
 }
 
 /**

@@ -139,6 +139,12 @@ async function init() {
   // Status bar click → EOL selection menu
   window.addEventListener("mdpad:showEolMenu", (e) => showEolMenu(e.detail.target));
 
+  // Close EOL popup when a modal dialog opens
+  window.addEventListener("mdpad:closePopups", () => {
+    const eolPopup = document.getElementById("eol-popup");
+    if (eolPopup) eolPopup.remove();
+  });
+
   // Expose close-state getter for main process (via executeJavaScript)
   window.__mdpadGetCloseState = () => ({
     isDirty,
@@ -457,6 +463,9 @@ function showGoToLineDialog() {
   // Prevent duplicate dialogs
   if (document.getElementById("goto-line-overlay")) return;
 
+  // Close any open popups (emoji picker, heading dropdown, context menu, etc.)
+  window.dispatchEvent(new CustomEvent("mdpad:closePopups"));
+
   const info = getCursorInfo();
   const totalLines = info.totalLines || 0;
 
@@ -465,7 +474,7 @@ function showGoToLineDialog() {
   overlay.id = "goto-line-overlay";
   overlay.style.cssText =
     "position:fixed;top:0;left:0;right:0;bottom:0;" +
-    "background:rgba(0,0,0,0.3);z-index:9999;" +
+    "background:rgba(0,0,0,0.3);z-index:100001;" +
     "display:flex;align-items:flex-start;justify-content:center;padding-top:20vh;";
 
   // Create dialog box
@@ -673,11 +682,14 @@ function showConfirmSaveDialog() {
       return;
     }
 
+    // Close any open popups (emoji picker, heading dropdown, context menu, etc.)
+    window.dispatchEvent(new CustomEvent("mdpad:closePopups"));
+
     const overlay = document.createElement("div");
     overlay.id = "confirm-save-overlay";
     overlay.style.cssText =
       "position:fixed;top:0;left:0;right:0;bottom:0;" +
-      "background:rgba(0,0,0,0.4);z-index:10000;" +
+      "background:rgba(0,0,0,0.4);z-index:100001;" +
       "display:flex;align-items:flex-start;justify-content:center;padding-top:15vh;";
 
     const modal = document.createElement("div");
@@ -1162,11 +1174,14 @@ function showReloadConfirmDialog({ title, message, discardLabel, saveLabel, canc
       return;
     }
 
+    // Close any open popups (emoji picker, heading dropdown, context menu, etc.)
+    window.dispatchEvent(new CustomEvent("mdpad:closePopups"));
+
     const overlay = document.createElement("div");
     overlay.id = overlayId;
     overlay.style.cssText =
       "position:fixed;top:0;left:0;right:0;bottom:0;" +
-      "background:rgba(0,0,0,0.4);z-index:10000;" +
+      "background:rgba(0,0,0,0.4);z-index:100001;" +
       "display:flex;align-items:flex-start;justify-content:center;padding-top:15vh;";
 
     const modal = document.createElement("div");
@@ -1265,11 +1280,14 @@ function showSimpleReloadDialog() {
   // Prevent duplicate
   if (document.getElementById("file-changed-overlay")) return;
 
+  // Close any open popups (emoji picker, heading dropdown, context menu, etc.)
+  window.dispatchEvent(new CustomEvent("mdpad:closePopups"));
+
   const overlay = document.createElement("div");
   overlay.id = "file-changed-overlay";
   overlay.style.cssText =
     "position:fixed;top:0;left:0;right:0;bottom:0;" +
-    "background:rgba(0,0,0,0.4);z-index:10000;" +
+    "background:rgba(0,0,0,0.4);z-index:100001;" +
     "display:flex;align-items:flex-start;justify-content:center;padding-top:15vh;";
 
   const modal = document.createElement("div");
@@ -1738,10 +1756,13 @@ function showRecoveryModal(recoveries, autosaves) {
 
 function showConfirmReplaceDialog() {
   return new Promise((resolve) => {
+    // Close any open popups (emoji picker, heading dropdown, context menu, etc.)
+    window.dispatchEvent(new CustomEvent("mdpad:closePopups"));
+
     const overlay = document.createElement("div");
     overlay.style.cssText =
       "position:fixed;top:0;left:0;right:0;bottom:0;" +
-      "background:rgba(0,0,0,0.3);z-index:10000;" +
+      "background:rgba(0,0,0,0.3);z-index:100001;" +
       "display:flex;align-items:center;justify-content:center;";
 
     const dialog = document.createElement("div");
@@ -1846,11 +1867,14 @@ function showCloseDialog(closeState) {
   // Prevent duplicate
   if (document.getElementById("close-dialog-overlay")) return;
 
+  // Close any open popups (emoji picker, heading dropdown, context menu, etc.)
+  window.dispatchEvent(new CustomEvent("mdpad:closePopups"));
+
   const overlay = document.createElement("div");
   overlay.id = "close-dialog-overlay";
   overlay.style.cssText =
     "position:fixed;top:0;left:0;right:0;bottom:0;" +
-    "background:rgba(0,0,0,0.4);z-index:10000;" +
+    "background:rgba(0,0,0,0.4);z-index:100001;" +
     "display:flex;align-items:flex-start;justify-content:center;padding-top:15vh;";
 
   const modal = document.createElement("div");

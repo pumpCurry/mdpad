@@ -1223,19 +1223,26 @@ async function main() {
     // Phase 13: Emoji Picker (Steps 49–56) [NEW]
     // =====================================================================
 
-    // Ensure editor is visible and focused, and format bar is in topbar mode
+    // Ensure editor is visible and focused
     await cdp.evaluate(`
       (function() {
         var e = document.getElementById("editor-pane");
         if (e && e.style.display === "none" && window.__mdpadHandleMenuAction) {
           window.__mdpadHandleMenuAction("toggleEditor");
         }
-        // Ensure format toolbar is visible (topbar mode)
-        if (window.__mdpadHandleMenuAction) {
-          window.__mdpadHandleMenuAction("formatBar:topbar");
-        }
         var view = window.__mdpadEditor && window.__mdpadEditor();
         if (view) view.focus();
+      })()
+    `);
+    await sleep(300);
+
+    // Enable format bar topbar mode so emoji button is visible
+    await cdp.evaluate(`
+      (function() {
+        localStorage.setItem("mdpad:formatBarMode", "topbar");
+        if (window.__mdpadHandleMenuAction) {
+          window.__mdpadHandleMenuAction("formatBarTopbar");
+        }
       })()
     `);
     await sleep(500);
@@ -1253,17 +1260,9 @@ async function main() {
 
     stepStart("Opening emoji picker via format toolbar button...");
     try {
-      // The emoji button in the format toolbar has id="fb-emoji-btn"
       const openResult = await cdp.evaluate(`
         (function() {
           var btn = document.getElementById("fb-emoji-btn");
-          if (!btn) {
-            // Fallback: search by title
-            var allBtns = document.querySelectorAll(".fb-btn, button");
-            for (var b of allBtns) {
-              if (b.title && b.title.toLowerCase().includes("emoji")) { btn = b; break; }
-            }
-          }
           if (!btn) return "NO_EMOJI_BTN";
           btn.click();
           return "CLICKED";
@@ -1399,22 +1398,21 @@ async function main() {
           var firstEmoji = picker.querySelector(".ep-grid-area .ep-emoji");
           if (!firstEmoji) return "NO_EMOJI";
           firstEmoji.click();
-          // Picker may not auto-close via CDP click (no real focus events),
-          // so we check content insertion and clean up manually
           return new Promise(function(resolve) {
             setTimeout(function() {
               var view = window.__mdpadEditor && window.__mdpadEditor();
               var content = view ? view.state.doc.toString() : "";
-              // Force-close picker if still open
-              var remainingPicker = document.querySelector(".emoji-picker");
-              if (remainingPicker) remainingPicker.remove();
-              resolve("content_len=" + content.length + " inserted=" + (content.length > 0));
+              // Force-remove picker (CDP clicks don't trigger outside-click close)
+              var p = document.querySelector(".emoji-picker");
+              if (p) p.remove();
+              resolve("content_len=" + content.length + " picker_closed=true");
             }, 300);
           });
         })()
       `);
       if (insertResult === "NO_PICKER" || insertResult === "NO_EMOJI") throw new Error(insertResult);
-      if (!insertResult.includes("inserted=true")) throw new Error("No content inserted: " + insertResult);
+      var contentLen = parseInt(insertResult.match(/content_len=(\d+)/)?.[1] || "0", 10);
+      if (contentLen === 0) throw new Error("No content inserted: " + insertResult);
       stepOK("Emoji inserted: " + insertResult);
     } catch (e) {
       stepSoftFail("Emoji insert: " + e.message);
@@ -1425,34 +1423,44 @@ async function main() {
       // Open picker again, enable name mode, click an emoji
       const shortcodeResult = await cdp.evaluate(`
         (function() {
-          // Re-open picker via fb-emoji-btn
           var btn = document.getElementById("fb-emoji-btn");
           if (!btn) return "NO_EMOJI_BTN";
+          // First click clears stale state from previous force-remove
           btn.click();
           return new Promise(function(resolve) {
             setTimeout(function() {
               var picker = document.querySelector(".emoji-picker");
-              if (!picker) { resolve("NO_PICKER"); return; }
-              // Enable name mode
-              var nameBtn = picker.querySelector(".ep-name-mode-btn");
-              if (nameBtn && !nameBtn.classList.contains("active")) nameBtn.click();
-              // Clear editor first
-              var view = window.__mdpadEditor && window.__mdpadEditor();
-              if (view) view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "" } });
+              if (!picker) {
+                // Stale state cleared; click again to actually open
+                btn.click();
+              }
               setTimeout(function() {
-                // Click first emoji in grid
-                var emoji = picker.querySelector(".ep-grid-area .ep-emoji");
-                if (!emoji) { resolve("NO_EMOJI"); return; }
-                emoji.click();
+                picker = document.querySelector(".emoji-picker");
+                if (!picker) { resolve("NO_PICKER"); return; }
+                // Enable name mode
+                var nameBtn = picker.querySelector(".ep-name-mode-btn");
+                if (nameBtn && !nameBtn.classList.contains("active")) nameBtn.click();
+                // Clear editor first
+                var view = window.__mdpadEditor && window.__mdpadEditor();
+                if (view) view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "" } });
                 setTimeout(function() {
-                  var view2 = window.__mdpadEditor && window.__mdpadEditor();
-                  var content = view2 ? view2.state.doc.toString() : "";
-                  // Name mode should insert :shortcode: format
-                  var hasColon = content.includes(":");
-                  resolve("content=" + JSON.stringify(content) + " hasColon=" + hasColon);
-                }, 300);
-              }, 200);
-            }, 500);
+                  // Click first emoji in grid
+                  var emoji = picker.querySelector(".ep-grid-area .ep-emoji");
+                  if (!emoji) { resolve("NO_EMOJI"); return; }
+                  emoji.click();
+                  setTimeout(function() {
+                    var view2 = window.__mdpadEditor && window.__mdpadEditor();
+                    var content = view2 ? view2.state.doc.toString() : "";
+                    // Name mode should insert :shortcode: format
+                    var hasColon = content.includes(":");
+                    // Force-remove picker for cleanup
+                    var p = document.querySelector(".emoji-picker");
+                    if (p) p.remove();
+                    resolve("content=" + JSON.stringify(content) + " hasColon=" + hasColon);
+                  }, 300);
+                }, 200);
+              }, 500);
+            }, 300);
           });
         })()
       `);
@@ -1493,15 +1501,16 @@ async function main() {
 
       const previewResult = await cdp.evaluate(`
         (function() {
-          var preview = document.getElementById("preview-pane");
+          var preview = document.querySelector("#preview-pane .markdown-body");
+          if (!preview) preview = document.getElementById("preview-pane");
           if (!preview) return "NO_PREVIEW";
           var content = preview.textContent || "";
           // The shortcodes should be rendered as emoji characters, not as :wave: text
           var hasWaveText = content.includes(":wave:");
           var hasRocketText = content.includes(":rocket:");
           // Check for emoji characters (wave = 👋, rocket = 🚀)
-          var hasWaveEmoji = content.includes("\\u{1F44B}") || content.includes("👋");
-          var hasRocketEmoji = content.includes("\\u{1F680}") || content.includes("🚀");
+          var hasWaveEmoji = content.includes("\\u{1F44B}") || content.includes("\u{1F44B}");
+          var hasRocketEmoji = content.includes("\\u{1F680}") || content.includes("\u{1F680}");
           return "wave_text=" + hasWaveText + " rocket_text=" + hasRocketText +
                  " wave_emoji=" + hasWaveEmoji + " rocket_emoji=" + hasRocketEmoji;
         })()
@@ -1531,18 +1540,14 @@ async function main() {
           }
         })()
       `);
-      await sleep(2000);
+      await sleep(1500);
 
       const multiResult = await cdp.evaluate(`
         (function() {
-          // Get actual rendered preview content from markdown-body div
-          var body = document.querySelector("#preview-pane .markdown-body");
-          if (!body) {
-            var preview = document.getElementById("preview-pane");
-            if (!preview) return "NO_PREVIEW";
-            body = preview;
-          }
-          var content = body.textContent || "";
+          var preview = document.querySelector("#preview-pane .markdown-body");
+          if (!preview) preview = document.getElementById("preview-pane");
+          if (!preview) return "NO_PREVIEW";
+          var content = preview.textContent || "";
           // Count how many shortcodes remain as text (not rendered)
           var unresolvedCount = 0;
           var codes = ["+1", "heart", "smile", "100", "fire"];
