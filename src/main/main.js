@@ -16,6 +16,7 @@ const {
   removeOrphanedBackup,
   getAutosaveDir,
 } = require("./autosave-manager");
+const https = require("https");
 const { stopAllWatchers } = require("./file-watcher");
 const {
   initFileWatchSettings,
@@ -440,6 +441,37 @@ function createWindow(openFilePath, paneConfig) {
       };
     });
 
+    // IPC: check for updates via GitHub Releases API
+    ipcMain.handle("app:checkForUpdates", async () => {
+      try {
+        const pkg = require("../../package.json");
+        let buildNumber = 1;
+        try {
+          const buildFile = path.join(__dirname, "..", "..", "build-number.json");
+          const buildData = JSON.parse(fs.readFileSync(buildFile, "utf-8"));
+          buildNumber = buildData.build || 1;
+        } catch { /* use default */ }
+        const [major, minor] = pkg.version.split(".");
+        const currentVersion = `v${major}.${minor}.${String(buildNumber).padStart(5, "0")}`;
+        const currentNumeric = parseBuildFromTag(currentVersion);
+
+        const release = await fetchLatestRelease();
+        const latestTag = release.tag_name || "";
+        const latestNumeric = parseBuildFromTag(latestTag);
+
+        return {
+          currentVersion,
+          latestVersion: latestTag,
+          isUpdateAvailable: latestNumeric > currentNumeric,
+          releaseNotes: (release.body || "").slice(0, 2000),
+          downloadUrl: release.html_url || "https://github.com/pumpCurry/mdpad/releases",
+          error: null,
+        };
+      } catch (err) {
+        return { error: err.message || "Unknown error" };
+      }
+    });
+
     ipcRegistered = true;
   }
 
@@ -473,6 +505,48 @@ function clearAutosaveForWindow(windowId) {
   } catch {
     // Ignore cleanup errors
   }
+}
+
+/**
+ * Parse a version tag like "v1.1.00055" into a comparable integer.
+ * Format: major * 1_000_000 + minor * 100_000 + build
+ */
+function parseBuildFromTag(tag) {
+  const m = String(tag).match(/^v?(\d+)\.(\d+)\.(\d+)$/);
+  if (!m) return 0;
+  return parseInt(m[1], 10) * 1000000 + parseInt(m[2], 10) * 100000 + parseInt(m[3], 10);
+}
+
+/**
+ * Fetch the latest release from GitHub Releases API.
+ * Returns the parsed JSON object. Rejects on network/timeout errors.
+ */
+function fetchLatestRelease() {
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname: "api.github.com",
+      path: "/repos/pumpCurry/mdpad/releases/latest",
+      headers: { "User-Agent": "mdpad-update-checker" },
+      timeout: 10000,
+    };
+    const req = https.get(options, (res) => {
+      let data = "";
+      res.on("data", (chunk) => { data += chunk; });
+      res.on("end", () => {
+        try {
+          if (res.statusCode !== 200) {
+            reject(new Error(`GitHub API returned ${res.statusCode}`));
+            return;
+          }
+          resolve(JSON.parse(data));
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
+    req.on("error", reject);
+    req.on("timeout", () => { req.destroy(); reject(new Error("Request timed out")); });
+  });
 }
 
 function loadRecoverySessions() {

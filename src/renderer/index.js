@@ -456,6 +456,9 @@ async function handleMenuAction(action) {
     case "about":
       showAboutDialog();
       break;
+    case "checkForUpdates":
+      showCheckForUpdatesDialog();
+      break;
   }
 }
 
@@ -536,6 +539,164 @@ function showGoToLineDialog() {
   overlay.addEventListener("mousedown", (e) => {
     if (e.target === overlay) close();
   });
+}
+
+async function showCheckForUpdatesDialog() {
+  // Prevent duplicate
+  if (document.getElementById("update-overlay")) return;
+
+  // Close any open popups
+  window.dispatchEvent(new CustomEvent("mdpad:closePopups"));
+
+  const overlay = document.createElement("div");
+  overlay.id = "update-overlay";
+  overlay.style.cssText =
+    "position:fixed;top:0;left:0;right:0;bottom:0;" +
+    "background:rgba(0,0,0,0.3);z-index:100001;" +
+    "display:flex;align-items:flex-start;justify-content:center;padding-top:15vh;";
+
+  const dialog = document.createElement("div");
+  dialog.style.cssText =
+    "background:#ffffff;border:1px solid #d0d7de;border-radius:12px;" +
+    "padding:28px 32px;width:400px;box-shadow:0 12px 40px rgba(0,0,0,0.18);text-align:center;";
+
+  // Spinner / checking message
+  const statusEl = document.createElement("div");
+  statusEl.style.cssText = "font-size:14px;color:#57606a;margin-bottom:16px;";
+  statusEl.textContent = t("update.checking");
+  dialog.appendChild(statusEl);
+
+  overlay.appendChild(dialog);
+  document.body.appendChild(overlay);
+
+  function close() {
+    overlay.remove();
+    focus();
+  }
+
+  overlay.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" || e.key === "Enter") {
+      e.preventDefault();
+      close();
+    }
+  });
+  overlay.addEventListener("mousedown", (e) => {
+    if (e.target === overlay) close();
+  });
+
+  // Focus overlay so keydown works
+  overlay.tabIndex = -1;
+  overlay.focus();
+
+  // Fetch update info
+  let result;
+  try {
+    result = await window.mdpad.checkForUpdates();
+  } catch {
+    result = { error: "IPC error" };
+  }
+
+  // Clear checking message
+  statusEl.remove();
+
+  if (result.error) {
+    // Error state
+    const iconEl = document.createElement("div");
+    iconEl.textContent = "⚠";
+    iconEl.style.cssText = "font-size:36px;margin-bottom:8px;";
+    dialog.insertBefore(iconEl, dialog.firstChild);
+
+    const titleEl = document.createElement("div");
+    titleEl.textContent = t("update.error");
+    titleEl.style.cssText = "font-size:16px;font-weight:600;color:#24292f;margin-bottom:8px;";
+    dialog.appendChild(titleEl);
+
+    const detailEl = document.createElement("div");
+    detailEl.textContent = t("update.errorDetail");
+    detailEl.style.cssText = "font-size:13px;color:#57606a;margin-bottom:16px;";
+    dialog.appendChild(detailEl);
+  } else if (result.isUpdateAvailable) {
+    // Update available
+    const iconEl = document.createElement("div");
+    iconEl.textContent = "🎉";
+    iconEl.style.cssText = "font-size:36px;margin-bottom:8px;";
+    dialog.insertBefore(iconEl, dialog.firstChild);
+
+    const titleEl = document.createElement("div");
+    titleEl.textContent = t("update.available");
+    titleEl.style.cssText = "font-size:16px;font-weight:600;color:#24292f;margin-bottom:12px;";
+    dialog.appendChild(titleEl);
+
+    const infoEl = document.createElement("div");
+    infoEl.style.cssText = "font-size:13px;color:#57606a;margin-bottom:12px;text-align:left;line-height:1.6;";
+    infoEl.innerHTML =
+      `<div>${t("update.currentVersion")} <code style="background:#f6f8fa;padding:2px 6px;border-radius:3px;font-size:12px;">${result.currentVersion}</code></div>` +
+      `<div>${t("update.latestVersion")} <code style="background:#f6f8fa;padding:2px 6px;border-radius:3px;font-size:12px;color:#1a7f37;font-weight:600;">${result.latestVersion}</code></div>`;
+    dialog.appendChild(infoEl);
+
+    // Release notes (if any)
+    if (result.releaseNotes) {
+      const notesLabel = document.createElement("div");
+      notesLabel.textContent = t("update.releaseNotes");
+      notesLabel.style.cssText = "font-size:12px;color:#57606a;text-align:left;margin-bottom:4px;";
+      dialog.appendChild(notesLabel);
+
+      const notesEl = document.createElement("div");
+      notesEl.textContent = result.releaseNotes.slice(0, 500);
+      notesEl.style.cssText =
+        "font-size:12px;color:#24292f;text-align:left;margin-bottom:16px;" +
+        "background:#f6f8fa;border:1px solid #d0d7de;border-radius:6px;padding:10px;" +
+        "max-height:120px;overflow-y:auto;white-space:pre-wrap;line-height:1.4;";
+      dialog.appendChild(notesEl);
+    }
+
+    // Download button
+    const dlBtn = document.createElement("button");
+    dlBtn.textContent = t("update.download");
+    dlBtn.style.cssText =
+      "padding:8px 24px;border:none;border-radius:6px;" +
+      "background:#1a7f37;color:#fff;cursor:pointer;font-size:14px;font-weight:600;" +
+      "margin-right:8px;transition:background 0.15s;";
+    dlBtn.onmouseover = () => { dlBtn.style.background = "#16653a"; };
+    dlBtn.onmouseout = () => { dlBtn.style.background = "#1a7f37"; };
+    dlBtn.onclick = () => {
+      window.mdpad.openExternal(result.downloadUrl);
+      close();
+    };
+    dialog.appendChild(dlBtn);
+  } else {
+    // Up to date
+    const iconEl = document.createElement("div");
+    iconEl.textContent = "✔";
+    iconEl.style.cssText = "font-size:36px;margin-bottom:8px;color:#1a7f37;";
+    dialog.insertBefore(iconEl, dialog.firstChild);
+
+    const titleEl = document.createElement("div");
+    titleEl.textContent = t("update.upToDate");
+    titleEl.style.cssText = "font-size:16px;font-weight:600;color:#24292f;margin-bottom:8px;";
+    dialog.appendChild(titleEl);
+
+    const verEl = document.createElement("div");
+    verEl.textContent = result.currentVersion;
+    verEl.style.cssText =
+      "font-size:13px;color:#8b949e;margin-bottom:16px;" +
+      "font-family:'SF Mono',Consolas,'Liberation Mono',Menlo,monospace;";
+    dialog.appendChild(verEl);
+  }
+
+  // Close button
+  const closeBtn = document.createElement("button");
+  closeBtn.textContent = t("update.close");
+  closeBtn.style.cssText =
+    "padding:6px 24px;border:1px solid #d0d7de;border-radius:6px;" +
+    "background:#f6f8fa;cursor:pointer;font-size:13px;color:#24292f;" +
+    "transition:background 0.15s;";
+  closeBtn.onmouseover = () => { closeBtn.style.background = "#e8ebef"; };
+  closeBtn.onmouseout = () => { closeBtn.style.background = "#f6f8fa"; };
+  closeBtn.onclick = close;
+  dialog.appendChild(closeBtn);
+
+  closeBtn.focus();
 }
 
 async function showAboutDialog() {

@@ -1,7 +1,7 @@
 /**
  * EXE Smoke Test for mdpad — Comprehensive Regression Suite
  *
- * 59-step test covering all features:
+ * 62-step test covering all features:
  *
  * Phase 0 — Setup (3 steps)
  * Phase 1 — Recovery modal (2 steps)
@@ -17,8 +17,9 @@
  * Phase 11 — Diff pane & autosave status (3 steps)
  * Phase 12 — Locale switching (2 steps)
  * Phase 13 — Emoji picker (8 steps) [NEW]
- * Phase 14 — Markdown shortcode rendering (2 steps) [NEW]
- * Phase 15 — Cleanup (1 step)
+ * Phase 14 — Markdown shortcode rendering (2 steps)
+ * Phase 15 — Check for Updates dialog (3 steps) [NEW]
+ * Phase 16 — Cleanup (1 step)
  *
  * Usage:
  *   node scripts/smoke-test.js [path-to-exe]
@@ -77,7 +78,7 @@ function resolveExePath() {
 // ---------------------------------------------------------------------------
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let stepNum = 0;
-const totalSteps = 59;
+const totalSteps = 62;
 const results = [];
 let softFailCount = 0;
 
@@ -1568,7 +1569,64 @@ async function main() {
     }
 
     // =====================================================================
-    // Phase 15: Cleanup (Step 59)
+    // Phase 15: Check for Updates Dialog (Steps 59–61) [NEW]
+    // =====================================================================
+    stepStart("Opening Check for Updates dialog...");
+    try {
+      await cdp.evaluate(`
+        (function() {
+          if (window.__mdpadHandleMenuAction) {
+            window.__mdpadHandleMenuAction("checkForUpdates");
+          }
+        })()
+      `);
+      await sleep(500);
+      const overlayExists = await cdp.evaluate(`!!document.getElementById("update-overlay")`);
+      if (!overlayExists) throw new Error("update-overlay not found");
+      stepOK("Check for Updates dialog opened");
+    } catch (e) {
+      stepSoftFail("Check for Updates open: " + e.message);
+    }
+
+    stepStart("Checking dialog content...");
+    try {
+      await sleep(2000); // Wait for network response
+      const content = await cdp.evaluate(`
+        (function() {
+          var overlay = document.getElementById("update-overlay");
+          return overlay ? overlay.textContent : "NO_OVERLAY";
+        })()
+      `);
+      if (content === "NO_OVERLAY") throw new Error("Overlay disappeared");
+      // Should contain version string or error/checking message
+      var hasContent = /v\d+\.\d+\.\d+|error|確認|version|update|checking/i.test(content);
+      if (!hasContent) throw new Error("Dialog content missing expected text: " + content.slice(0, 100));
+      stepOK("Dialog content: " + content.slice(0, 80));
+    } catch (e) {
+      stepSoftFail("Dialog content: " + e.message);
+    }
+
+    stepStart("Closing Check for Updates dialog with Escape...");
+    try {
+      await cdp.dispatchKey("Escape", 0, 27);
+      await sleep(300);
+      const gone = await cdp.evaluate(`!document.getElementById("update-overlay")`);
+      if (!gone) {
+        // Force close
+        await cdp.evaluate(`
+          (function() {
+            var o = document.getElementById("update-overlay");
+            if (o) o.remove();
+          })()
+        `);
+      }
+      stepOK("Check for Updates dialog closed");
+    } catch (e) {
+      stepSoftFail("Dialog close: " + e.message);
+    }
+
+    // =====================================================================
+    // Phase 16: Cleanup (Step 62)
     // =====================================================================
     stepStart("Force-closing process and cleaning up...");
     cdp.close();

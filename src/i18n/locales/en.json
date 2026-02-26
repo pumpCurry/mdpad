@@ -50,7 +50,8 @@
     "view_devTools": "Toggle Developer Tools",
     "view_language": "Language",
     "help": "Help",
-    "help_about": "About mdpad..."
+    "help_about": "About mdpad...",
+    "help_checkForUpdates": "Check for Updates..."
   },
   "dialog": {
     "filterMarkdown": "Markdown",
@@ -265,6 +266,18 @@
     "kbd": "Keyboard Input",
     "escape": "Escape",
     "color": "Color"
+  },
+  "update": {
+    "checking": "Checking for updates...",
+    "upToDate": "You're using the latest version",
+    "available": "A new version is available!",
+    "currentVersion": "Current version:",
+    "latestVersion": "Latest version:",
+    "releaseNotes": "Release notes:",
+    "download": "Download",
+    "close": "Close",
+    "error": "Could not check for updates",
+    "errorDetail": "Please check your internet connection and try again."
   },
   "emojiPicker": {
     "search": "Search emoji...",
