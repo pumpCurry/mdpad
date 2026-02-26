@@ -27,7 +27,6 @@ win:
         - x64
   icon: assets/icons/icon.ico
   legalTrademarks: ""
-  companyName: "5r4ce2"
 
 portable:
   artifactName: "mdpad-${version}-portable.exe"

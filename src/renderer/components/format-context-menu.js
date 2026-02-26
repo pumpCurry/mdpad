@@ -37,6 +37,9 @@ export function initFormatContextMenu() {
       closeContextMenu();
     }
   });
+
+  // Close when a modal dialog opens
+  window.addEventListener("mdpad:closePopups", () => closeContextMenu());
 }
 
 function showContextMenu(x, y) {
