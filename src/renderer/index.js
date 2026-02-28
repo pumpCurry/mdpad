@@ -29,6 +29,8 @@ import { initFormatContextMenu } from "./components/format-context-menu.js";
 import { initFormatToolbar, setFormatBarMode, getFormatBarMode } from "./components/format-toolbar.js";
 import { getFormatCommand, isFormatActive } from "./components/format-commands.js";
 import { initEmojiPicker } from "./components/emoji-picker.js";
+import { initTocPane, updateToc, toggleTocPane } from "./components/toc-pane.js";
+import { renderMarkdown } from "./lib/markdown-engine.js";
 
 // Application state
 let currentFilePath = null;
@@ -48,6 +50,10 @@ let autosaveNextAt = 0; // timestamp (ms) of next autosave, 0 = not scheduled
 // File watch settings
 let fileWatchEnabled = true;
 let autoReloadEnabled = true;
+
+// Pending pane config for external file open (race condition fix)
+// apply-pane-config IPC が dropOpenFile: より先に到着した場合に保留する
+let _pendingPaneConfig = null;
 
 // Initialize components
 async function init() {
@@ -73,6 +79,9 @@ async function init() {
 
   // Init emoji picker (registers callback with toolbar)
   initEmojiPicker();
+
+  // Init TOC (Table of Contents) sidebar pane
+  initTocPane();
 
   // Init preview
   const previewContainer = document.getElementById("preview-pane");
@@ -251,8 +260,14 @@ async function init() {
   });
 
   // Pane config listener (for external file open smart layout)
+  // ファイルがまだ読み込まれていない場合は pending に保存し、
+  // loadFileByPath 完了後に適用する（レースコンディション回避）
   window.mdpad.onApplyPaneConfig((config) => {
-    applyExternalOpenLayout(config);
+    if (!currentFilePath) {
+      _pendingPaneConfig = config;
+    } else {
+      applyExternalOpenLayout(config);
+    }
   });
 
   // Check for crash recovery: sessions first, then autosave backups
@@ -334,6 +349,9 @@ function onEditorChange(content) {
 
   updateStatusBar();
 
+  // Update TOC (debounced internally)
+  updateToc(content);
+
   // Trigger global search update (event-based, not polling)
   triggerGlobalSearchUpdate();
 }
@@ -367,10 +385,15 @@ async function handleMenuAction(action) {
     return;
   }
 
-  // Handle file opened in new window via drag-drop
+  // Handle file opened in new window via drag-drop or file association
   if (action.startsWith("dropOpenFile:")) {
     const filePath = action.substring("dropOpenFile:".length);
     await loadFileByPath(filePath);
+    // ファイル読み込み完了後、保留中のペイン設定を適用（レースコンディション回避）
+    if (_pendingPaneConfig) {
+      await applyExternalOpenLayout(_pendingPaneConfig);
+      _pendingPaneConfig = null;
+    }
     return;
   }
 
@@ -459,6 +482,41 @@ async function handleMenuAction(action) {
       break;
     case "toggleCloseBrackets":
       toggleCloseBrackets();
+      break;
+    case "toggleMinimap":
+      {
+        const editor = getEditor();
+        if (editor) {
+          const { toggleMinimap } = await import("./components/minimap.js");
+          toggleMinimap(editor);
+        }
+      }
+      break;
+    case "toggleToc":
+      {
+        toggleTocPane();
+        // TOC が表示された場合、現在の内容で更新
+        const content = getContent();
+        if (content) updateToc(content);
+      }
+      break;
+    case "toggleLint":
+      {
+        const editor = getEditor();
+        if (editor) {
+          const { toggleLint } = await import("./components/markdown-linter.js");
+          toggleLint(editor);
+        }
+      }
+      break;
+    case "toggleLintPanel":
+      {
+        const editor = getEditor();
+        if (editor) {
+          const { openLintPanelAction } = await import("./components/markdown-linter.js");
+          openLintPanelAction(editor);
+        }
+      }
       break;
     case "undo":
       {
@@ -581,8 +639,9 @@ function showGoToLineDialog() {
 }
 
 async function showCheckForUpdatesDialog() {
-  // Prevent duplicate
+  // Prevent duplicate or stacking with other modal dialogs
   if (document.getElementById("update-overlay")) return;
+  if (document.getElementById("about-overlay")) return;
 
   // Close any open popups
   window.dispatchEvent(new CustomEvent("mdpad:closePopups"));
@@ -597,7 +656,7 @@ async function showCheckForUpdatesDialog() {
   const dialog = document.createElement("div");
   dialog.style.cssText =
     "background:#ffffff;border:1px solid #d0d7de;border-radius:12px;" +
-    "padding:28px 32px;width:400px;box-shadow:0 12px 40px rgba(0,0,0,0.18);text-align:center;";
+    "padding:28px 32px;width:520px;max-width:90vw;box-shadow:0 12px 40px rgba(0,0,0,0.18);text-align:center;";
 
   // Spinner / checking message
   const statusEl = document.createElement("div");
@@ -673,7 +732,7 @@ async function showCheckForUpdatesDialog() {
       `<div>${t("update.latestVersion")} <code style="background:#f6f8fa;padding:2px 6px;border-radius:3px;font-size:12px;color:#1a7f37;font-weight:600;">${result.latestVersion}</code></div>`;
     dialog.appendChild(infoEl);
 
-    // Release notes (if any)
+    // Release notes (if any) — Markdown で描画する
     if (result.releaseNotes) {
       const notesLabel = document.createElement("div");
       notesLabel.textContent = t("update.releaseNotes");
@@ -681,11 +740,30 @@ async function showCheckForUpdatesDialog() {
       dialog.appendChild(notesLabel);
 
       const notesEl = document.createElement("div");
-      notesEl.textContent = result.releaseNotes.slice(0, 500);
+      // markdown-it で HTML に変換して描画（リリースノートは GitHub Releases の Markdown）
+      notesEl.innerHTML = renderMarkdown(result.releaseNotes);
+      notesEl.classList.add("markdown-body");
       notesEl.style.cssText =
-        "font-size:12px;color:#24292f;text-align:left;margin-bottom:16px;" +
-        "background:#f6f8fa;border:1px solid #d0d7de;border-radius:6px;padding:10px;" +
-        "max-height:120px;overflow-y:auto;white-space:pre-wrap;line-height:1.4;";
+        "font-size:13px;color:#24292f;text-align:left;margin-bottom:16px;" +
+        "background:#f6f8fa;border:1px solid #d0d7de;border-radius:6px;padding:12px 16px;" +
+        "max-height:300px;overflow-y:auto;line-height:1.5;" +
+        "word-wrap:break-word;overflow-wrap:break-word;";
+
+      // Markdown 内の画像・コードブロックがダイアログからはみ出さないようスコープ付きスタイル
+      const scopedStyle = document.createElement("style");
+      scopedStyle.textContent = [
+        "#update-overlay .markdown-body img { max-width: 100%; height: auto; }",
+        "#update-overlay .markdown-body pre { overflow-x: auto; max-width: 100%; }",
+        "#update-overlay .markdown-body h1 { font-size: 1.3em; border-bottom: 1px solid #d0d7de; padding-bottom: 4px; }",
+        "#update-overlay .markdown-body h2 { font-size: 1.15em; border-bottom: 1px solid #d0d7de; padding-bottom: 3px; }",
+        "#update-overlay .markdown-body h3 { font-size: 1.05em; }",
+        "#update-overlay .markdown-body p { margin: 6px 0; }",
+        "#update-overlay .markdown-body ul, #update-overlay .markdown-body ol { padding-left: 20px; margin: 6px 0; }",
+        "#update-overlay .markdown-body code { font-size: 12px; background: #eaeef2; padding: 1px 4px; border-radius: 3px; }",
+        "#update-overlay .markdown-body pre code { background: none; padding: 0; }",
+      ].join("\n");
+      notesEl.prepend(scopedStyle);
+
       dialog.appendChild(notesEl);
     }
 
@@ -739,8 +817,9 @@ async function showCheckForUpdatesDialog() {
 }
 
 async function showAboutDialog() {
-  // Prevent duplicate
+  // Prevent duplicate or stacking with other modal dialogs
   if (document.getElementById("about-overlay")) return;
+  if (document.getElementById("update-overlay")) return;
 
   // Get version info from main process
   let versionStr = "v1.1.00001";
@@ -1221,6 +1300,9 @@ async function openFileInCurrentWindow(filePath) {
   }
 
   await loadFileByPath(filePath);
+  // ファイル読み込み完了後、スマートレイアウトを適用
+  // （プレビューペインの自動表示）
+  await applyExternalOpenLayout("__smart__");
 }
 
 /**

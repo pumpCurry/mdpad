@@ -1,4 +1,4 @@
-import { EditorView } from "@codemirror/view";
+import { EditorView, scrollPastEnd } from "@codemirror/view";
 import { EditorState, Compartment } from "@codemirror/state";
 import {
   keymap,
@@ -37,6 +37,8 @@ import { highlightSelectionMatches } from "@codemirror/search";
 import { t } from "../../i18n/i18n-renderer.js";
 import { rectSelectExtension } from "./rect-select.js";
 import { getFormatKeymap } from "./format-commands.js";
+import { getMinimapExtension } from "./minimap.js";
+import { getLintExtension } from "./markdown-linter.js";
 
 const wrapCompartment = new Compartment();
 const closeBracketsCompartment = new Compartment();
@@ -489,6 +491,9 @@ export function createEditor(container, onChange) {
     getFormatKeymap(),
     wrapCompartment.of(EditorView.lineWrapping),
     rulerPlugin(80),
+    scrollPastEnd(),
+    getMinimapExtension(),
+    getLintExtension(),
     horizontalRulerPlugin(),
     overwriteModePlugin(),
     overwriteInputHandler(),

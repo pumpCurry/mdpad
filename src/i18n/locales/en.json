@@ -47,6 +47,9 @@
     "view_formatBar_topbar": "Top Bar",
     "view_formatBar_sidebar": "Left Sidebar",
     "view_formatBar_hidden": "Hidden",
+    "view_minimap": "Minimap",
+    "view_toc": "Table of Contents",
+    "view_lint": "Markdown Lint",
     "view_devTools": "Toggle Developer Tools",
     "view_language": "Language",
     "help": "Help",
@@ -131,6 +134,11 @@
     "diff": "Diff",
     "hits": "hits",
     "noResults": "No results"
+  },
+  "toc": {
+    "title": "TABLE OF CONTENTS",
+    "close": "Close",
+    "empty": "No headings found"
   },
   "diffPane": {
     "editHistory": "Edit History",
@@ -270,7 +278,7 @@
   "update": {
     "checking": "Checking for updates...",
     "upToDate": "You're using the latest version",
-    "available": "A new version is available!",
+    "available": "A new version of mdpad is available!",
     "currentVersion": "Current version:",
     "latestVersion": "Latest version:",
     "releaseNotes": "Release notes:",

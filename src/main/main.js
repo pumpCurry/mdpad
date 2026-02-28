@@ -463,7 +463,7 @@ function createWindow(openFilePath, paneConfig) {
           currentVersion,
           latestVersion: latestTag,
           isUpdateAvailable: latestNumeric > currentNumeric,
-          releaseNotes: (release.body || "").slice(0, 2000),
+          releaseNotes: release.body || "",
           downloadUrl: release.html_url || "https://github.com/pumpCurry/mdpad/releases",
           error: null,
         };
