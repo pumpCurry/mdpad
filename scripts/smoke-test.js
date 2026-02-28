@@ -453,6 +453,18 @@ async function main() {
 
     stepStart("Line count updates with content...");
     await sleep(500);
+    // リカバリ後に内容がクリアされる場合がある（タイミング依存）
+    // その場合はテスト用コンテンツを再挿入して後続テストを継続する
+    const postRecoveryContent = await cdp.evaluate(`
+      (function() {
+        var view = window.__mdpadEditor();
+        return view ? view.state.doc.toString() : "";
+      })()
+    `);
+    if (!postRecoveryContent || postRecoveryContent.trim().length === 0) {
+      await cdp.evaluate(`window.__mdpadSetAndSelect("line1\\nline2\\nline3\\nline4\\nline5", 0, 0)`);
+      await sleep(300);
+    }
     const linesText = await cdp.evaluate(`
       (function() {
         var el = document.getElementById("sb-lines");

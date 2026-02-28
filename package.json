@@ -13,7 +13,7 @@
     "test:smoke": "node scripts/smoke-test.js",
     "build:full": "npm run build && npm run test:smoke && node scripts/create-zip.js",
     "dev": "npm run build:renderer && electron . --dev",
-    "build:installer": "npm run build:renderer && electron-builder --win nsis"
+    "build:installer": "npm run build:renderer && node scripts/build-installer.js"
   },
   "author": "(C)pumpCurry, 5r4ce2",
   "license": "MIT",
