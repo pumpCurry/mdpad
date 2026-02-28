@@ -47,6 +47,9 @@
     "view_formatBar_topbar": "トップバー",
     "view_formatBar_sidebar": "左サイドバー",
     "view_formatBar_hidden": "非表示",
+    "view_minimap": "ミニマップ",
+    "view_toc": "目次",
+    "view_lint": "Markdown Lint",
     "view_devTools": "開発者ツールの切替",
     "view_language": "言語",
     "help": "ヘルプ",
@@ -131,6 +134,11 @@
     "diff": "差分",
     "hits": "件",
     "noResults": "結果なし"
+  },
+  "toc": {
+    "title": "目次",
+    "close": "閉じる",
+    "empty": "見出しが見つかりません"
   },
   "diffPane": {
     "editHistory": "編集履歴",
@@ -270,7 +278,7 @@
   "update": {
     "checking": "アップデートを確認中...",
     "upToDate": "最新バージョンをお使いです",
-    "available": "新しいバージョンが利用可能です！",
+    "available": "mdpadの新しいバージョンが利用可能です！",
     "currentVersion": "現在のバージョン:",
     "latestVersion": "最新バージョン:",
     "releaseNotes": "リリースノート:",

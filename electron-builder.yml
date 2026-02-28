@@ -29,13 +29,13 @@ win:
   legalTrademarks: ""
 
 portable:
-  artifactName: "mdpad-${version}-portable.exe"
+  artifactName: "mdpad-${env.MDPAD_DISPLAY_VERSION}-portable.exe"
 
 nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
-  artifactName: "mdpad-${version}-setup.exe"
+  artifactName: "mdpad-${env.MDPAD_DISPLAY_VERSION}-setup.exe"
 
 # Build portable zip:
 # npm run build:zip

@@ -248,6 +248,26 @@ function createMenu(_mainWindow) {
             },
           ],
         },
+        {
+          label: t("menu.view_minimap"),
+          type: "checkbox",
+          checked: false,
+          click: () => sendToTarget("menu:action", "toggleMinimap"),
+        },
+        {
+          label: t("menu.view_toc"),
+          type: "checkbox",
+          checked: false,
+          accelerator: "CmdOrCtrl+Shift+T",
+          click: () => sendToTarget("menu:action", "toggleToc"),
+        },
+        {
+          label: t("menu.view_lint"),
+          type: "checkbox",
+          checked: false,
+          accelerator: "CmdOrCtrl+Shift+M",
+          click: () => sendToTarget("menu:action", "toggleLint"),
+        },
         { type: "separator" },
         {
           label: t("menu.view_zoomIn"),

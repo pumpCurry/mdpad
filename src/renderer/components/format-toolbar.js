@@ -118,6 +118,9 @@ function renderTopbar() {
     "|",
     // Emoji button
     "emoji",
+    "|",
+    // Color palette
+    "color",
   ];
 
   layout.forEach((item) => {
@@ -132,7 +135,6 @@ function renderTopbar() {
     } else {
       const cmd = getFormatCommand(item);
       if (!cmd) return;
-      if (item === "color" && !cmd.fn) return; // Skip color until Phase 6
       formatBarEl.appendChild(createFormatButton(view, cmd));
     }
   });
@@ -167,6 +169,8 @@ function renderSidebar() {
     "table", "horizontalRule", "details", "definitionList", "kbd", "escape",
     "|",
     "emoji",
+    "|",
+    "color",
   ];
 
   layout.forEach((item) => {
@@ -181,7 +185,6 @@ function renderSidebar() {
     } else {
       const cmd = getFormatCommand(item);
       if (!cmd) return;
-      if (item === "color" && !cmd.fn) return;
       formatBarEl.appendChild(createFormatButton(view, cmd));
     }
   });

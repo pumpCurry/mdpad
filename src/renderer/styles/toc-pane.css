@@ -1,0 +1,165 @@
+/*
+ * toc-pane.css
+ *
+ * TOC（目次）サイドバーペインのスタイル定義。
+ * #pane-container の左側に固定幅のサイドバーとして表示される。
+ *
+ * 【責務】
+ * - TOC ペインのレイアウト（ヘッダー + スクロール可能なコンテンツ）
+ * - 見出しレベル (H1-H6) に応じたインデントとスタイリング
+ * - リサイズハンドルのスタイル
+ * - ホバー/アクティブ状態のフィードバック
+ *
+ * 【依存】
+ * - main.css のテーマ変数（#pane-container のフレックスレイアウト）
+ * - toc-pane.js が生成する DOM 構造
+ *
+ * Version: 0.1.10020
+ * Since: 0.1.10020
+ * Revision: 1
+ * LastModified: 2026-03-01 00:00:00 (JST)
+ */
+
+/* ===== TOC ペイン本体 ===== */
+
+.toc-pane {
+  width: 200px;
+  min-width: 120px;
+  max-width: 500px;
+  background: #f6f8fa;
+  border-right: 1px solid #d0d7de;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  color: #24292f;
+}
+
+/* ===== ヘッダー ===== */
+
+.toc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: #eaeef2;
+  border-bottom: 1px solid #d0d7de;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.toc-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #57606a;
+}
+
+.toc-close {
+  background: none;
+  border: none;
+  font-size: 16px;
+  color: #8b949e;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  border-radius: 3px;
+}
+
+.toc-close:hover {
+  background: #d0d7de;
+  color: #24292f;
+}
+
+/* ===== コンテンツエリア ===== */
+
+.toc-content {
+  overflow-y: auto;
+  flex: 1;
+  padding: 4px 0;
+}
+
+/* 空メッセージ */
+.toc-empty {
+  padding: 12px;
+  color: #8b949e;
+  font-size: 12px;
+  font-style: italic;
+  text-align: center;
+}
+
+/* ===== 見出し項目 ===== */
+
+.toc-item {
+  padding: 3px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-radius: 0;
+  transition: background 0.1s;
+}
+
+.toc-item:hover {
+  background: #e8ebef;
+}
+
+.toc-item.active {
+  background: #ddf4ff;
+  color: #0969da;
+}
+
+/* 見出しレベルに応じたインデント */
+.toc-item[data-level="1"] {
+  padding-left: 10px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.toc-item[data-level="2"] {
+  padding-left: 22px;
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.toc-item[data-level="3"] {
+  padding-left: 34px;
+  font-size: 12px;
+}
+
+.toc-item[data-level="4"] {
+  padding-left: 46px;
+  font-size: 12px;
+  color: #57606a;
+}
+
+.toc-item[data-level="5"] {
+  padding-left: 58px;
+  font-size: 11px;
+  color: #57606a;
+}
+
+.toc-item[data-level="6"] {
+  padding-left: 70px;
+  font-size: 11px;
+  color: #8b949e;
+}
+
+/* ===== リサイズハンドル ===== */
+
+.toc-resize-handle {
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  flex-shrink: 0;
+  transition: background 0.15s;
+  z-index: 10;
+}
+
+.toc-resize-handle:hover,
+.toc-resize-handle.active {
+  background: #0969da;
+}
