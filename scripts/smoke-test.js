@@ -17,7 +17,7 @@
  * Phase 11 — Format: keyboard shortcuts (6 steps)
  * Phase 12 — Preview rendering (14 steps)
  * Phase 13 — Context menu (6 steps)
- * Phase 14 — Format toolbar modes (5 steps)
+ * Phase 14 — Format toolbar modes (5 steps) + sidebar tests (7 steps)
  * Phase 15 — Emoji picker (8 steps)
  * Phase 16 — Dialogs (12 steps)
  * Phase 17 — EOL selection (3 steps)
@@ -86,7 +86,7 @@ function resolveExePath() {
 // ---------------------------------------------------------------------------
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let stepNum = 0;
-const totalSteps = 131;
+const totalSteps = 138;
 const results = [];
 let softFailCount = 0;
 
@@ -1363,8 +1363,143 @@ async function main() {
     if (!barBack) throw new Error("Format bar not restored");
     stepOK("Format bar restored to topbar");
 
+    // --- Phase 14b: Sidebar Toolbar Tests (Steps 92–98) ---
+    // サイドバーモードに切替え、DOM構造・ボタン配置・フォーマット実行・
+    // 見出しドロップダウン・カラーパレットの動作を検証する
+
+    stepStart("Sidebar: DOM structure (main-content wrapper)...");
+    await cdp.evaluate(`window.__mdpadHandleMenuAction("setFormatBar:sidebar")`);
+    await sleep(500);
+    const sidebarDOM = await cdp.evaluate(`
+      (function() {
+        var bar = document.getElementById("format-bar");
+        var wrapper = document.getElementById("main-content");
+        var paneC = document.getElementById("pane-container");
+        if (!bar) return { error: "NO_BAR" };
+        return {
+          hasSidebarClass: bar.className.includes("sidebar"),
+          barWidth: bar.offsetWidth,
+          wrapperExists: !!wrapper,
+          paneInWrapper: wrapper ? wrapper.contains(paneC) : false,
+          flexDir: getComputedStyle(bar).flexDirection
+        };
+      })()
+    `);
+    if (sidebarDOM.error) throw new Error("Format bar not found in sidebar mode");
+    if (!sidebarDOM.hasSidebarClass) throw new Error("Missing sidebar class");
+    if (!sidebarDOM.wrapperExists) throw new Error("#main-content wrapper missing");
+    if (!sidebarDOM.paneInWrapper) throw new Error("pane-container not inside #main-content");
+    if (sidebarDOM.flexDir !== "column") throw new Error("Expected flex-direction:column, got " + sidebarDOM.flexDir);
+    stepOK("sidebar class, wrapper, column layout, width=" + sidebarDOM.barWidth + "px");
+
+    stepStart("Sidebar: buttons present and vertical layout...");
+    const sidebarBtns = await cdp.evaluate(`
+      (function() {
+        var bar = document.getElementById("format-bar");
+        if (!bar) return { error: "NO_BAR" };
+        var btns = bar.querySelectorAll(".fb-btn[data-format-id]");
+        var ids = [];
+        for (var b of btns) ids.push(b.getAttribute("data-format-id"));
+        // ボタンのY座標が昇順であることを確認（縦配置）
+        var rects = [];
+        for (var b of btns) rects.push(b.getBoundingClientRect().top);
+        var isVertical = true;
+        for (var i = 1; i < rects.length; i++) {
+          if (rects[i] < rects[i - 1]) { isVertical = false; break; }
+        }
+        return { count: btns.length, ids: ids, isVertical: isVertical };
+      })()
+    `);
+    if (sidebarBtns.error) throw new Error("No format bar");
+    if (sidebarBtns.count < 10) throw new Error("Only " + sidebarBtns.count + " sidebar buttons, expected 10+");
+    if (!sidebarBtns.isVertical) throw new Error("Buttons not vertically arranged");
+    // topbar と同じボタンが揃っていることを確認
+    const requiredIds = ["bold", "italic", "underline", "strikethrough", "link", "bulletList", "numberedList"];
+    const missingIds = requiredIds.filter(id => !sidebarBtns.ids.includes(id));
+    if (missingIds.length > 0) throw new Error("Missing sidebar buttons: " + missingIds.join(", "));
+    stepOK("Sidebar buttons: " + sidebarBtns.count + ", vertical, all required IDs present");
+
+    stepStart("Sidebar: Bold format via button click...");
+    // サイドバーモードでエディタにテキストを設定し、ボタンクリックでBold適用
+    await cdp.evaluate(`window.__mdpadSetAndSelect("sidebar test", 0, 12)`);
+    await sleep(50);
+    const sidebarBoldResult = await cdp.evaluate(`window.__mdpadExecFormat("bold")`);
+    if (!sidebarBoldResult.includes("**sidebar test**")) {
+      throw new Error("Sidebar Bold failed: " + sidebarBoldResult);
+    }
+    stepOK("Sidebar Bold: " + sidebarBoldResult.substring(0, 40));
+
+    stepStart("Sidebar: Italic format...");
+    await cdp.evaluate(`window.__mdpadSetAndSelect("sidebar test", 0, 12)`);
+    await sleep(50);
+    const sidebarItalicResult = await cdp.evaluate(`window.__mdpadExecFormat("italic")`);
+    if (!sidebarItalicResult.includes("*sidebar test*")) {
+      throw new Error("Sidebar Italic failed: " + sidebarItalicResult);
+    }
+    stepOK("Sidebar Italic: " + sidebarItalicResult.substring(0, 40));
+
+    stepStart("Sidebar: Heading dropdown opens to the right...");
+    // サイドバーモードでは見出しドロップダウンが右方向に展開する
+    // ボタン: data-format-id="heading", メニュー: .fb-dropdown-overlay (bodyに追加される)
+    const headingDropdown = await cdp.evaluate(`
+      (function() {
+        var btn = document.querySelector("#format-bar .fb-btn[data-format-id='heading']");
+        if (!btn) return { error: "NO_HEADING_BTN" };
+        btn.click();
+        // メニューは document.body に .fb-dropdown-overlay として追加される
+        var menu = document.querySelector(".fb-dropdown-overlay");
+        if (!menu) return { error: "NO_MENU" };
+        var btnRect = btn.getBoundingClientRect();
+        var menuRect = menu.getBoundingClientRect();
+        // サイドバーでは menu.left >= btn.right（右に展開）
+        var opensRight = menuRect.left >= btnRect.right - 5;
+        var itemCount = menu.querySelectorAll(".fb-dropdown-item").length;
+        // メニューを閉じる（ボタンを再クリック）
+        btn.click();
+        return { opensRight: opensRight, itemCount: itemCount,
+                 btnRight: Math.round(btnRect.right), menuLeft: Math.round(menuRect.left) };
+      })()
+    `);
+    if (headingDropdown.error === "NO_HEADING_BTN") throw new Error("Heading dropdown button not found in sidebar");
+    if (headingDropdown.error === "NO_MENU") throw new Error("Heading menu did not open");
+    if (!headingDropdown.opensRight) {
+      throw new Error("Heading menu not opening right: btn.right=" + headingDropdown.btnRight + " menu.left=" + headingDropdown.menuLeft);
+    }
+    if (headingDropdown.itemCount < 6) throw new Error("Expected 6+ heading items, got " + headingDropdown.itemCount);
+    stepOK("Heading dropdown opens right (" + headingDropdown.itemCount + " items), btnR=" + headingDropdown.btnRight + " menuL=" + headingDropdown.menuLeft);
+
+    stepStart("Sidebar: H2 applied from heading dropdown...");
+    await cdp.evaluate(`window.__mdpadSetAndSelect("sidebar heading", 0, 15)`);
+    await sleep(50);
+    const sidebarH2 = await cdp.evaluate(`window.__mdpadExecFormat("h2")`);
+    if (!sidebarH2.includes("## sidebar heading")) {
+      throw new Error("Sidebar H2 failed: " + sidebarH2);
+    }
+    stepOK("Sidebar H2: " + sidebarH2.substring(0, 40));
+
+    stepStart("Sidebar: restore topbar and verify cleanup...");
+    await cdp.evaluate(`window.__mdpadHandleMenuAction("setFormatBar:topbar")`);
+    await sleep(500);
+    const cleanupCheck = await cdp.evaluate(`
+      (function() {
+        var bar = document.getElementById("format-bar");
+        var wrapper = document.getElementById("main-content");
+        return {
+          barExists: !!bar,
+          hasTopbar: bar ? bar.className.includes("topbar") : false,
+          hasSidebar: bar ? bar.className.includes("sidebar") : false,
+          wrapperGone: !wrapper
+        };
+      })()
+    `);
+    if (!cleanupCheck.barExists) throw new Error("Format bar gone after restore");
+    if (!cleanupCheck.hasTopbar) throw new Error("Not topbar mode after restore");
+    if (cleanupCheck.hasSidebar) throw new Error("Still has sidebar class");
+    if (!cleanupCheck.wrapperGone) throw new Error("#main-content wrapper not removed after topbar restore");
+    stepOK("topbar restored, sidebar wrapper removed");
+
     // =====================================================================
-    // Phase 15: Emoji Picker (Steps 92–99)
+    // Phase 15: Emoji Picker (Steps 99–106)
     // =====================================================================
     stepStart("Open emoji picker...");
     const emojiBtn = await cdp.evaluate(`
@@ -2026,7 +2161,7 @@ async function main() {
     }
 
     // =====================================================================
-    // Phase 24: Cleanup (Step 131)
+    // Phase 24: Cleanup (Step 138)
     // =====================================================================
     stepStart("Force-closing process and cleaning up...");
     cdp.close();
