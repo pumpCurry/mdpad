@@ -7,6 +7,7 @@
  */
 
 import { keymap } from "@codemirror/view";
+import { EditorSelection } from "@codemirror/state";
 
 // ─── Inline Format Toggle ───────────────────────────────────────────
 
@@ -73,7 +74,12 @@ export function toggleInlineFormat(view, marker) {
   }
 
   if (changes.length > 0) {
-    view.dispatch({ changes, selection: { ranges: selections } });
+    view.dispatch({
+      changes,
+      selection: EditorSelection.create(
+        selections.map(s => EditorSelection.range(s.anchor, s.head !== undefined ? s.head : s.anchor))
+      ),
+    });
   }
   return true;
 }
