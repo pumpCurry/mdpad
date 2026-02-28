@@ -27,6 +27,7 @@ import { syncEditorToPreview } from "./lib/scroll-sync.js";
 import { initI18n, t, setLocale, onLocaleChange } from "../i18n/i18n-renderer.js";
 import { initFormatContextMenu } from "./components/format-context-menu.js";
 import { initFormatToolbar, setFormatBarMode, getFormatBarMode } from "./components/format-toolbar.js";
+import { getFormatCommand, isFormatActive } from "./components/format-commands.js";
 import { initEmojiPicker } from "./components/emoji-picker.js";
 
 // Application state
@@ -180,6 +181,44 @@ async function init() {
 
   // Expose handleMenuAction for smoke tests (CDP can't trigger IPC-based menu actions)
   window.__mdpadHandleMenuAction = (action) => handleMenuAction(action);
+
+  // Expose set-and-select helper for smoke tests (format command verification)
+  window.__mdpadSetAndSelect = (text, from, to) => {
+    const view = getEditor();
+    if (!view) return "NO_EDITOR";
+    suppressDirty = true;
+    const spec = { changes: { from: 0, to: view.state.doc.length, insert: text } };
+    if (from !== undefined && to !== undefined) {
+      spec.selection = { anchor: from, head: to };
+    }
+    view.dispatch(spec);
+    suppressDirty = false;
+    view.focus();
+    return "OK";
+  };
+
+  // Expose direct format command executor for smoke tests (bypasses toolbar DOM)
+  window.__mdpadExecFormat = (formatId) => {
+    const cmd = getFormatCommand(formatId);
+    const view = getEditor();
+    if (!cmd || !view) return "NO_CMD_OR_EDITOR";
+    if (cmd.fn) cmd.fn(view);
+    view.focus();
+    return view.state.doc.toString();
+  };
+
+  // Expose preview update for smoke tests (suppressDirty blocks auto-update)
+  window.__mdpadUpdatePreview = () => {
+    const state = getPaneState();
+    if (state.preview) updatePreviewImmediate(getContent());
+  };
+
+  // Expose format active state checker for smoke tests
+  window.__mdpadIsFormatActive = (formatId) => {
+    const view = getEditor();
+    if (!view) return false;
+    return isFormatActive(view, formatId);
+  };
 
   // Session auto-save for crash recovery (lightweight, always on)
   setInterval(() => {

@@ -3,7 +3,7 @@
  *
  * Right-click context menu for Markdown formatting.
  * Shows toggleable format items with active state checkmarks.
- * Headings shown in a submenu.
+ * Headings shown in a flyout submenu, color shown as a palette.
  */
 
 import { FORMAT_COMMANDS, isFormatActive, getFormatCommand, insertColor } from "./format-commands.js";
@@ -11,6 +11,15 @@ import { getEditor } from "./editor-pane.js";
 import { t } from "../../i18n/i18n-renderer.js";
 
 let menuEl = null;
+let headingSubmenuEl = null;
+let colorPaletteEl = null;
+
+const COLOR_PRESETS = [
+  "#cf222e", "#bf8700", "#1a7f37", "#0969da", "#8250df", "#e16f24",
+  "#ff8182", "#d4a72c", "#4ac26b", "#54aeff", "#c297ff", "#ffa657",
+  "#82071e", "#6c4400", "#044f1e", "#033d8b", "#512a97", "#953800",
+  "#24292f", "#57606a", "#8b949e", "#d0d7de", "#f6f8fa", "#ffffff",
+];
 
 /**
  * Initialize the format context menu.
@@ -29,6 +38,8 @@ export function initFormatContextMenu() {
   // Close on click outside or Escape
   document.addEventListener("mousedown", (e) => {
     if (menuEl && !menuEl.contains(e.target)) {
+      if (headingSubmenuEl && headingSubmenuEl.contains(e.target)) return;
+      if (colorPaletteEl && colorPaletteEl.contains(e.target)) return;
       closeContextMenu();
     }
   });
@@ -70,11 +81,11 @@ function showContextMenu(x, y) {
       if (itemId === "heading_submenu") {
         menuEl.appendChild(createHeadingSubmenu(view));
       } else if (itemId === "color") {
-        menuEl.appendChild(createColorMenuItem(view));
+        menuEl.appendChild(createColorMenuItem());
       } else {
         const cmd = getFormatCommand(itemId);
         if (!cmd) return;
-        menuEl.appendChild(createMenuItem(view, cmd));
+        menuEl.appendChild(createMenuItem(cmd));
       }
     });
 
@@ -103,17 +114,34 @@ function showContextMenu(x, y) {
 }
 
 function closeContextMenu() {
+  closeHeadingSubmenu();
+  closeColorPalette();
   if (menuEl) {
     menuEl.remove();
     menuEl = null;
   }
 }
 
-function createMenuItem(view, cmd) {
+function closeHeadingSubmenu() {
+  if (headingSubmenuEl) {
+    headingSubmenuEl.remove();
+    headingSubmenuEl = null;
+  }
+}
+
+function closeColorPalette() {
+  if (colorPaletteEl) {
+    colorPaletteEl.remove();
+    colorPaletteEl = null;
+  }
+}
+
+function createMenuItem(cmd) {
+  const view = getEditor();
   const item = document.createElement("div");
   item.className = "fcm-item";
 
-  const isActive = cmd.toggle ? isFormatActive(view, cmd.id) : false;
+  const isActive = view && cmd.toggle ? isFormatActive(view, cmd.id) : false;
   if (isActive) item.classList.add("active");
 
   // Check mark
@@ -144,11 +172,14 @@ function createMenuItem(view, cmd) {
   }
 
   item.addEventListener("click", (e) => {
+    e.preventDefault();
     e.stopPropagation();
     closeContextMenu();
-    if (cmd.fn) {
-      cmd.fn(view);
-      view.focus();
+    // Get fresh editor reference at click time (matches toolbar pattern)
+    const currentView = getEditor();
+    if (currentView && cmd.fn) {
+      currentView.focus();
+      cmd.fn(currentView);
     }
   });
 
@@ -187,18 +218,60 @@ function createHeadingSubmenu(view) {
   label.textContent = t("format.heading");
   container.appendChild(label);
 
-  // Submenu
-  const submenu = document.createElement("div");
-  submenu.className = "fcm-submenu";
+  // Arrow indicator
+  const arrow = document.createElement("span");
+  arrow.className = "fcm-arrow";
+  arrow.textContent = "\u25B6";
+  container.appendChild(arrow);
 
-  for (let i = 1; i <= 6; i++) {
-    const cmd = getFormatCommand(`h${i}`);
-    if (cmd) {
-      submenu.appendChild(createMenuItem(view, cmd));
+  // Show submenu on hover — render to document.body to avoid overflow clipping
+  let hoverTimeout = null;
+
+  function showSubmenu() {
+    if (headingSubmenuEl) return;
+
+    headingSubmenuEl = document.createElement("div");
+    headingSubmenuEl.className = "fcm-submenu";
+
+    for (let i = 1; i <= 6; i++) {
+      const cmd = getFormatCommand(`h${i}`);
+      if (cmd) {
+        headingSubmenuEl.appendChild(createMenuItem(cmd));
+      }
     }
+
+    document.body.appendChild(headingSubmenuEl);
+
+    // Position to the right of the heading item
+    const itemRect = container.getBoundingClientRect();
+    headingSubmenuEl.style.left = (itemRect.right + 2) + "px";
+    headingSubmenuEl.style.top = itemRect.top + "px";
+
+    // Viewport boundary check
+    const subRect = headingSubmenuEl.getBoundingClientRect();
+    if (subRect.right > window.innerWidth) {
+      headingSubmenuEl.style.left = (itemRect.left - subRect.width - 2) + "px";
+    }
+    if (subRect.bottom > window.innerHeight) {
+      headingSubmenuEl.style.top = (window.innerHeight - subRect.height - 4) + "px";
+    }
+
+    // Close submenu when mouse leaves both the item and submenu
+    headingSubmenuEl.addEventListener("mouseleave", () => {
+      hoverTimeout = setTimeout(closeHeadingSubmenu, 150);
+    });
+    headingSubmenuEl.addEventListener("mouseenter", () => {
+      clearTimeout(hoverTimeout);
+    });
   }
 
-  container.appendChild(submenu);
+  container.addEventListener("mouseenter", () => {
+    clearTimeout(hoverTimeout);
+    showSubmenu();
+  });
+  container.addEventListener("mouseleave", () => {
+    hoverTimeout = setTimeout(closeHeadingSubmenu, 150);
+  });
 
   // Prevent click on parent from closing menu
   container.addEventListener("click", (e) => {
@@ -208,40 +281,132 @@ function createHeadingSubmenu(view) {
   return container;
 }
 
-function createColorMenuItem(view) {
-  const item = document.createElement("div");
-  item.className = "fcm-item";
-  item.style.gap = "6px";
+function createColorMenuItem() {
+  const container = document.createElement("div");
+  container.className = "fcm-item has-submenu";
 
   // Check (empty)
   const check = document.createElement("span");
   check.className = "fcm-check";
-  item.appendChild(check);
+  container.appendChild(check);
 
-  // Color input
-  const colorInput = document.createElement("input");
-  colorInput.type = "color";
-  colorInput.value = "#0969da";
-  colorInput.style.cssText = "width:20px;height:20px;padding:0;border:1px solid #d0d7de;border-radius:3px;cursor:pointer;flex-shrink:0;";
-
-  // Prevent menu close when interacting with color picker
-  colorInput.addEventListener("click", (e) => e.stopPropagation());
-  colorInput.addEventListener("mousedown", (e) => e.stopPropagation());
-
-  item.appendChild(colorInput);
+  // Icon
+  const icon = document.createElement("span");
+  icon.className = "fcm-icon";
+  icon.textContent = "\uD83C\uDFA8";
+  container.appendChild(icon);
 
   // Label
   const label = document.createElement("span");
   label.className = "fcm-label";
   label.textContent = t("format.color");
-  item.appendChild(label);
+  container.appendChild(label);
 
-  item.addEventListener("click", (e) => {
-    e.stopPropagation();
-    closeContextMenu();
-    insertColor(view, colorInput.value);
-    view.focus();
+  // Arrow indicator
+  const arrow = document.createElement("span");
+  arrow.className = "fcm-arrow";
+  arrow.textContent = "\u25B6";
+  container.appendChild(arrow);
+
+  let hoverTimeout = null;
+
+  function showPalette() {
+    if (colorPaletteEl) return;
+
+    colorPaletteEl = document.createElement("div");
+    colorPaletteEl.className = "fcm-submenu fcm-color-palette";
+
+    // Grid of color swatches
+    const grid = document.createElement("div");
+    grid.style.cssText = "display:grid;grid-template-columns:repeat(6,1fr);gap:4px;";
+
+    COLOR_PRESETS.forEach((color) => {
+      const swatch = document.createElement("button");
+      swatch.style.cssText =
+        `width:26px;height:26px;border-radius:4px;border:1px solid #d0d7de;cursor:pointer;background:${color};padding:0;`;
+      if (color === "#ffffff") swatch.style.border = "1px solid #8b949e";
+      swatch.title = color;
+      swatch.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        closeContextMenu();
+        const currentView = getEditor();
+        if (currentView) {
+          currentView.focus();
+          insertColor(currentView, color);
+        }
+      });
+      grid.appendChild(swatch);
+    });
+
+    colorPaletteEl.appendChild(grid);
+
+    // Custom color input row
+    const customRow = document.createElement("div");
+    customRow.style.cssText = "display:flex;gap:4px;margin-top:6px;align-items:center;";
+
+    const colorInput = document.createElement("input");
+    colorInput.type = "color";
+    colorInput.value = "#0969da";
+    colorInput.style.cssText = "width:28px;height:24px;padding:0;border:1px solid #d0d7de;border-radius:4px;cursor:pointer;";
+    colorInput.addEventListener("mousedown", (e) => e.stopPropagation());
+
+    const applyBtn = document.createElement("button");
+    applyBtn.textContent = "Apply";
+    applyBtn.style.cssText =
+      "flex:1;height:24px;border:1px solid #d0d7de;border-radius:4px;background:#f6f8fa;cursor:pointer;font-size:11px;color:#24292f;";
+    applyBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      closeContextMenu();
+      const currentView = getEditor();
+      if (currentView) {
+        currentView.focus();
+        insertColor(currentView, colorInput.value);
+      }
+    });
+
+    customRow.appendChild(colorInput);
+    customRow.appendChild(applyBtn);
+    colorPaletteEl.appendChild(customRow);
+
+    document.body.appendChild(colorPaletteEl);
+
+    // Position to the right of the color item
+    const itemRect = container.getBoundingClientRect();
+    colorPaletteEl.style.left = (itemRect.right + 2) + "px";
+    colorPaletteEl.style.top = itemRect.top + "px";
+
+    // Viewport boundary check
+    const palRect = colorPaletteEl.getBoundingClientRect();
+    if (palRect.right > window.innerWidth) {
+      colorPaletteEl.style.left = (itemRect.left - palRect.width - 2) + "px";
+    }
+    if (palRect.bottom > window.innerHeight) {
+      colorPaletteEl.style.top = (window.innerHeight - palRect.height - 4) + "px";
+    }
+
+    // Close palette when mouse leaves both the item and palette
+    colorPaletteEl.addEventListener("mouseleave", () => {
+      hoverTimeout = setTimeout(closeColorPalette, 150);
+    });
+    colorPaletteEl.addEventListener("mouseenter", () => {
+      clearTimeout(hoverTimeout);
+    });
+  }
+
+  container.addEventListener("mouseenter", () => {
+    clearTimeout(hoverTimeout);
+    showPalette();
+  });
+  container.addEventListener("mouseleave", () => {
+    hoverTimeout = setTimeout(closeColorPalette, 150);
   });
 
-  return item;
+  // Prevent click on parent from closing menu
+  container.addEventListener("click", (e) => {
+    e.stopPropagation();
+  });
+
+  return container;
 }
