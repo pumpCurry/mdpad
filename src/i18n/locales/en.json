@@ -91,7 +91,9 @@
     "tipPreview": "Toggle Preview (Ctrl+2)",
     "tipDiff": "Toggle Diff (Ctrl+3)",
     "tipEditPreview": "Edit + Preview",
-    "tipAll": "All Panes"
+    "tipAll": "All Panes",
+    "toc": "TOC",
+    "tipToc": "Toggle Table of Contents"
   },
   "statusBar": {
     "ln": "Ln",

@@ -37,6 +37,7 @@ nsis:
   perMachine: false
   allowToChangeInstallationDirectory: true
   artifactName: "mdpad-${env.MDPAD_DISPLAY_VERSION}-setup.exe"
+  include: "build/installer.nsh"
 
 # Build portable zip:
 # npm run build:zip

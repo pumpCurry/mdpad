@@ -2,6 +2,27 @@
 
 # mdpad - Update History
 
+## v1.1.00066 (2026-03-02)
+
+### 🆕 TOC Pane Promotion (Sidebar → Full Pane)
+- **4-pane layout**: Promoted TOC (Table of Contents) from sidebar to a full pane inside `#pane-container`. Layout: editor | preview | toc | diff
+- **Generic N-pane layout engine**: Complete rewrite of `pane-manager.js` from 3 hardcoded panes to PANE_ORDER-based generic layout with dynamic resize handle binding
+- **Cursor-following highlight**: The heading section containing the cursor is highlighted with `cursor-active` class (blue background)
+- **Viewport-following marker**: Headings within the editor's visible range are marked with `viewport-visible` class (left border bar)
+- **TOC auto-scroll**: When the active heading is outside the visible area of the TOC pane, it auto-scrolls to keep it visible
+- **Toolbar TOC button**: Added "TOC" button to toolbar. "All" button now shows all 4 panes
+- **TOC width persistence**: Resized TOC width is saved to localStorage and restored on next launch
+
+### 🔧 Build System Improvements
+- **NSIS installer version zero-padding**: Added `build/installer.nsh` to read `MDPAD_DISPLAY_VERSION` environment variable at NSIS compile time and override VERSION. Installer UI now correctly shows 5-digit zero-padded version
+- **build-installer.js**: Sets `MDPAD_DISPLAY_VERSION` environment variable when running electron-builder
+
+### 🧪 Tests
+- **TOC demo test** (`scripts/toc-demo-test.js`): 8-item automated test via CDP (pane existence, toggle, heading detection, click jump, all-panes, button state, cursor-active)
+- **Smoke test fix**: Updated pane count and reset logic for 4-pane support after TOC pane addition
+
+---
+
 ## v1.1.00039 (2026-02-23)
 
 ### Git Integration

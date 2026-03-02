@@ -589,13 +589,15 @@ async function main() {
       })()
     `);
     await sleep(200);
-    // Hide preview and diff, leaving only editor
+    // Hide preview, diff, and TOC, leaving only editor
     await cdp.evaluate(`
       (function() {
         var p = document.getElementById("preview-pane");
         if (p && p.style.display !== "none") window.__mdpadHandleMenuAction("togglePreview");
         var d = document.getElementById("diff-pane");
         if (d && d.style.display !== "none") window.__mdpadHandleMenuAction("toggleDiff");
+        var t = document.getElementById("toc-pane");
+        if (t && t.style.display !== "none") window.__mdpadHandleMenuAction("toggleToc");
       })()
     `);
     await sleep(200);
@@ -615,10 +617,12 @@ async function main() {
         var e = document.getElementById("editor-pane");
         var p = document.getElementById("preview-pane");
         var d = document.getElementById("diff-pane");
+        var t = document.getElementById("toc-pane");
         var vis = 0;
         if (e && e.style.display !== "none") vis++;
         if (p && p.style.display !== "none") vis++;
         if (d && d.style.display !== "none") vis++;
+        if (t && t.style.display !== "none") vis++;
         return vis;
       })()
     `);
@@ -626,13 +630,15 @@ async function main() {
     stepOK("Last pane protection works, visible: " + lastPaneVis);
 
     stepStart("Ctrl+1/2/3 keyboard shortcuts toggle panes...");
-    // Reset to editor only
+    // Reset to editor only (TOCも非表示にする)
     await cdp.evaluate(`
       (function() {
         var p = document.getElementById("preview-pane");
         if (p && p.style.display !== "none") window.__mdpadHandleMenuAction("togglePreview");
         var d = document.getElementById("diff-pane");
         if (d && d.style.display !== "none") window.__mdpadHandleMenuAction("toggleDiff");
+        var t = document.getElementById("toc-pane");
+        if (t && t.style.display !== "none") window.__mdpadHandleMenuAction("toggleToc");
         var e = document.getElementById("editor-pane");
         if (e && e.style.display === "none") window.__mdpadHandleMenuAction("toggleEditor");
       })()
@@ -654,6 +660,8 @@ async function main() {
         if (p && p.style.display !== "none") window.__mdpadHandleMenuAction("togglePreview");
         var d = document.getElementById("diff-pane");
         if (d && d.style.display !== "none") window.__mdpadHandleMenuAction("toggleDiff");
+        var t = document.getElementById("toc-pane");
+        if (t && t.style.display !== "none") window.__mdpadHandleMenuAction("toggleToc");
       })()
     `);
     await sleep(300);

@@ -1,48 +1,40 @@
 /**
- * toc-pane.js
- *
- * TOC（Table of Contents / 目次）サイドバーペイン。
+ * @fileoverview TOC（目次）ペイン
+ * @description
  * エディタの内容から Markdown 見出しを抽出し、
  * クリックで該当行にジャンプするナビゲーション機能を提供する。
+ * #pane-container 内の正式なペイン（editor → preview → toc → diff の順）として動作する。
  *
  * 【動作フロー】
  * - エディタ内容変更時に見出しを再パース（300ms debounce）
  * - コードブロック内の `#` は見出しとして認識しない
  * - 見出しレベル (H1-H6) に応じたインデント付きリストを生成
  * - 各項目クリックで goToLine() を呼び出し
+ * - カーソル位置に応じて「現在のセクション」をハイライト（cursor-active）
+ * - エディタのビューポート範囲内の見出しをマーク（viewport-visible）
+ * - アクティブ見出しが TOC の表示範囲外なら自動スクロール
  *
  * 【レイアウト】
- * - #pane-container の左側にサイドバーとして配置
- * - 幅 200px（デフォルト）、リサイズハンドル付き
- * - 表示/非表示は View メニューまたはキーボードショートカットで切り替え
+ * - #pane-container 内の .pane として配置（preview と diff の間）
+ * - デフォルト幅 200px（pane-manager.js が flex 値を制御）
+ * - リサイズは pane-manager.js の共通リサイズハンドルが担当
  *
  * @file toc-pane.js
- * @version 0.1.10020
+ * @version 1.1.00064
  * @since 0.1.10020
- * @revision 1
- * @lastModified 2026-03-01 00:00:00 (JST)
+ * @revision 2
+ * @lastModified 2026-03-02 01:00:00 (JST)
  */
 
 import { goToLine, getEditor } from "./editor-pane.js";
+import { togglePane } from "./pane-manager.js";
+import { updateButtonStates } from "./toolbar.js";
 import { t, onLocaleChange } from "../../i18n/i18n-renderer.js";
-
-/** localStorage キー */
-const STORAGE_KEY = "mdpad:tocVisible";
-const STORAGE_KEY_WIDTH = "mdpad:tocWidth";
-
-/** デフォルトの TOC ペイン幅 (px) */
-const DEFAULT_WIDTH = 200;
-const MIN_WIDTH = 120;
-const MAX_WIDTH = 500;
 
 /** DOM 要素の参照 */
 let tocPaneEl = null;
 let tocContentEl = null;
 let tocHeaderEl = null;
-let resizeHandleEl = null;
-
-/** 表示状態 */
-let tocVisible = localStorage.getItem(STORAGE_KEY) === "true";
 
 /** 見出しリストのキャッシュ（再描画の抑制用） */
 let lastHeadingsJson = "";
@@ -50,10 +42,18 @@ let lastHeadingsJson = "";
 /** debounce タイマー */
 let updateTimer = null;
 
+/** カーソル追随ハイライトのキャッシュ（前回値と同じならスキップ） */
+let lastCursorLine = -1;
+
+/** ビューポート追随のキャッシュ */
+let lastTopLine = -1;
+let lastBottomLine = -1;
+
 /**
  * Markdown テキストから見出しを抽出する。
  * コードブロック（``` ~ ```）内の行は除外する。
  *
+ * @function parseHeadings
  * @param {string} content - Markdown テキスト
  * @returns {Array<{level: number, text: string, line: number}>} 見出し配列
  */
@@ -90,110 +90,61 @@ function parseHeadings(content) {
 
 /**
  * TOC ペインを初期化する。
- * DOM 要素の生成、イベントリスナーの設定を行う。
+ * HTML に静的配置された DOM 要素の参照取得、イベントリスナーの設定を行う。
  *
  * 【注意】
  * - この関数は init() から1回だけ呼ばれる
- * - #pane-container の前に TOC ペインとリサイズハンドルを挿入する
+ * - DOM 要素は index.html に静的に配置されている（#pane-container 内）
+ * - 表示/非表示は pane-manager.js の togglePane("toc") が制御する
+ *
+ * @function initTocPane
  */
 export function initTocPane() {
-  const paneContainer = document.getElementById("pane-container");
-  if (!paneContainer) return;
+  // HTML に静的配置された要素を参照
+  tocPaneEl = document.getElementById("toc-pane");
+  if (!tocPaneEl) return;
 
-  // TOC ペイン要素を生成
-  tocPaneEl = document.createElement("div");
-  tocPaneEl.id = "toc-pane";
-  tocPaneEl.className = "toc-pane";
-  tocPaneEl.style.display = tocVisible ? "flex" : "none";
+  tocHeaderEl = tocPaneEl.querySelector(".toc-header");
+  tocContentEl = tocPaneEl.querySelector(".toc-content");
 
-  // 保存された幅を復元
-  const savedWidth = parseInt(localStorage.getItem(STORAGE_KEY_WIDTH), 10);
-  if (savedWidth && savedWidth >= MIN_WIDTH && savedWidth <= MAX_WIDTH) {
-    tocPaneEl.style.width = savedWidth + "px";
+  // i18n テキスト設定
+  const titleEl = tocHeaderEl.querySelector(".toc-title");
+  const closeBtn = tocHeaderEl.querySelector(".toc-close");
+  const emptyEl = tocContentEl.querySelector(".toc-empty");
+
+  if (titleEl) titleEl.textContent = t("toc.title");
+  if (closeBtn) closeBtn.title = t("toc.close");
+  if (emptyEl) emptyEl.textContent = t("toc.empty");
+
+  // 閉じるボタン → pane-manager に委譲
+  if (closeBtn) {
+    closeBtn.addEventListener("click", () => {
+      togglePane("toc");
+      updateButtonStates();
+    });
   }
 
-  // ヘッダー
-  tocHeaderEl = document.createElement("div");
-  tocHeaderEl.className = "toc-header";
-  tocHeaderEl.innerHTML = `
-    <span class="toc-title">${t("toc.title")}</span>
-    <button class="toc-close" title="${t("toc.close")}">&times;</button>
-  `;
-  tocPaneEl.appendChild(tocHeaderEl);
-
-  // 閉じるボタンのイベント
-  tocHeaderEl.querySelector(".toc-close").addEventListener("click", () => {
-    toggleTocPane();
-  });
-
-  // コンテンツエリア
-  tocContentEl = document.createElement("div");
-  tocContentEl.className = "toc-content";
-  tocContentEl.innerHTML = `<div class="toc-empty">${t("toc.empty")}</div>`;
-  tocPaneEl.appendChild(tocContentEl);
-
-  // リサイズハンドル（TOC ペインの右端）
-  resizeHandleEl = document.createElement("div");
-  resizeHandleEl.className = "toc-resize-handle";
-  setupResizeHandle(resizeHandleEl);
-
-  // DOM に挿入: pane-container の前に配置
-  paneContainer.parentNode.insertBefore(tocPaneEl, paneContainer);
-  paneContainer.parentNode.insertBefore(resizeHandleEl, paneContainer);
-
-  // リサイズハンドルの表示制御
-  resizeHandleEl.style.display = tocVisible ? "block" : "none";
-
-  // ロケール変更時に再描画
+  // ロケール変更時にテキストを再設定
   onLocaleChange(() => {
-    if (tocHeaderEl) {
-      tocHeaderEl.querySelector(".toc-title").textContent = t("toc.title");
-      tocHeaderEl.querySelector(".toc-close").title = t("toc.close");
-    }
-    // 空メッセージも更新
-    const emptyEl = tocContentEl?.querySelector(".toc-empty");
-    if (emptyEl) emptyEl.textContent = t("toc.empty");
+    if (titleEl) titleEl.textContent = t("toc.title");
+    if (closeBtn) closeBtn.title = t("toc.close");
+    // 空メッセージも更新（見出しがない場合のみ DOM に存在する）
+    const currentEmptyEl = tocContentEl?.querySelector(".toc-empty");
+    if (currentEmptyEl) currentEmptyEl.textContent = t("toc.empty");
   });
-}
-
-/**
- * TOC ペインの表示/非表示を切り替える。
- * 状態は localStorage に保存される。
- *
- * @returns {boolean} 切り替え後の表示状態
- */
-export function toggleTocPane() {
-  tocVisible = !tocVisible;
-  localStorage.setItem(STORAGE_KEY, String(tocVisible));
-
-  if (tocPaneEl) {
-    tocPaneEl.style.display = tocVisible ? "flex" : "none";
-  }
-  if (resizeHandleEl) {
-    resizeHandleEl.style.display = tocVisible ? "block" : "none";
-  }
-
-  return tocVisible;
-}
-
-/**
- * TOC ペインが表示中かどうかを返す。
- *
- * @returns {boolean} 表示中なら true
- */
-export function isTocVisible() {
-  return tocVisible;
 }
 
 /**
  * エディタの内容に基づいて TOC を更新する。
  * 300ms の debounce で頻繁な更新を抑制する。
  *
+ * 【注意】
+ * - 非表示時もスキップしない（ペイン表示時に最新状態が必要なため）
+ *
+ * @function updateToc
  * @param {string} content - エディタの現在のテキスト内容
  */
 export function updateToc(content) {
-  if (!tocVisible) return; // 非表示時はスキップ
-
   // debounce
   if (updateTimer) clearTimeout(updateTimer);
   updateTimer = setTimeout(() => {
@@ -205,6 +156,7 @@ export function updateToc(content) {
  * TOC を即座に更新する（debounce なし）。
  * 見出しをパースし、DOM を再構築する。
  *
+ * @function updateTocImmediate
  * @param {string} content - エディタの現在のテキスト内容
  */
 function updateTocImmediate(content) {
@@ -216,6 +168,11 @@ function updateTocImmediate(content) {
   // 変更がなければ再描画をスキップ
   if (newJson === lastHeadingsJson) return;
   lastHeadingsJson = newJson;
+
+  // ハイライトキャッシュをリセット（見出し構造が変わったため）
+  lastCursorLine = -1;
+  lastTopLine = -1;
+  lastBottomLine = -1;
 
   // コンテンツをクリア
   tocContentEl.innerHTML = "";
@@ -240,7 +197,7 @@ function updateTocImmediate(content) {
       const editor = getEditor();
       if (editor) editor.focus();
 
-      // アクティブ状態を更新
+      // アクティブ状態を更新（手動クリック）
       tocContentEl.querySelectorAll(".toc-item.active").forEach((el) => {
         el.classList.remove("active");
       });
@@ -252,40 +209,86 @@ function updateTocImmediate(content) {
 }
 
 /**
- * TOC ペインのリサイズハンドルを設定する。
- * ドラッグでペイン幅を変更し、localStorage に保存する。
+ * カーソル位置に基づいて TOC のアクティブ見出しを更新する。
+ * カーソルが属する見出しセクション（カーソル行以前の最後の見出し）を
+ * cursor-active クラスでハイライトし、必要に応じて TOC を自動スクロールする。
  *
- * @param {HTMLElement} handle - リサイズハンドル要素
+ * 【パフォーマンス最適化】
+ * - 前回と同じカーソル行の場合は処理をスキップする
+ *
+ * @function updateTocHighlight
+ * @param {number} cursorLine - エディタのカーソル行番号（1-indexed）
  */
-function setupResizeHandle(handle) {
-  let startX = 0;
-  let startWidth = 0;
+export function updateTocHighlight(cursorLine) {
+  // 前回と同じなら何もしない
+  if (cursorLine === lastCursorLine) return;
+  lastCursorLine = cursorLine;
 
-  handle.addEventListener("pointerdown", (e) => {
-    e.preventDefault();
-    handle.setPointerCapture(e.pointerId);
-    handle.classList.add("active");
+  if (!tocContentEl) return;
+  const items = tocContentEl.querySelectorAll(".toc-item");
+  if (items.length === 0) return;
 
-    startX = e.clientX;
-    startWidth = tocPaneEl.offsetWidth;
+  let activeItem = null;
 
-    const onMove = (e) => {
-      const dx = e.clientX - startX;
-      const newWidth = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startWidth + dx));
-      tocPaneEl.style.width = newWidth + "px";
-    };
-
-    const onUp = (e) => {
-      handle.classList.remove("active");
-      handle.releasePointerCapture(e.pointerId);
-      handle.removeEventListener("pointermove", onMove);
-      handle.removeEventListener("pointerup", onUp);
-
-      // 幅を保存
-      localStorage.setItem(STORAGE_KEY_WIDTH, String(tocPaneEl.offsetWidth));
-    };
-
-    handle.addEventListener("pointermove", onMove);
-    handle.addEventListener("pointerup", onUp);
+  // 見出しリストを走査し、カーソル行以前の最後の見出しを特定
+  items.forEach((item) => {
+    item.classList.remove("cursor-active");
+    const line = parseInt(item.dataset.line, 10);
+    if (line <= cursorLine) {
+      activeItem = item;
+    }
   });
+
+  if (activeItem) {
+    activeItem.classList.add("cursor-active");
+    // アクティブ項目が TOC コンテンツの表示範囲外なら自動スクロール
+    scrollIntoViewIfNeeded(activeItem);
+  }
+}
+
+/**
+ * エディタのビューポート範囲に基づいて、見出しの可視状態を更新する。
+ * 表示範囲内にある見出しに viewport-visible クラスを付与する。
+ *
+ * 【パフォーマンス最適化】
+ * - 前回と同じ範囲の場合は処理をスキップする
+ *
+ * @function updateTocViewport
+ * @param {number} topLine - ビューポート上端の行番号（1-indexed）
+ * @param {number} bottomLine - ビューポート下端の行番号（1-indexed）
+ */
+export function updateTocViewport(topLine, bottomLine) {
+  // 前回と同じなら何もしない
+  if (topLine === lastTopLine && bottomLine === lastBottomLine) return;
+  lastTopLine = topLine;
+  lastBottomLine = bottomLine;
+
+  if (!tocContentEl) return;
+  const items = tocContentEl.querySelectorAll(".toc-item");
+  if (items.length === 0) return;
+
+  items.forEach((item) => {
+    const line = parseInt(item.dataset.line, 10);
+    item.classList.toggle(
+      "viewport-visible",
+      line >= topLine && line <= bottomLine
+    );
+  });
+}
+
+/**
+ * 要素が親コンテナの表示範囲外にある場合、スムーズスクロールで中央に表示する。
+ *
+ * @function scrollIntoViewIfNeeded
+ * @param {HTMLElement} element - スクロール対象の要素
+ */
+function scrollIntoViewIfNeeded(element) {
+  if (!tocContentEl) return;
+  const cRect = tocContentEl.getBoundingClientRect();
+  const eRect = element.getBoundingClientRect();
+
+  // 要素がコンテナの表示範囲外にある場合のみスクロール
+  if (eRect.top < cRect.top || eRect.bottom > cRect.bottom) {
+    element.scrollIntoView({ block: "center", behavior: "smooth" });
+  }
 }
