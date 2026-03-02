@@ -91,7 +91,9 @@
     "tipPreview": "プレビュー切替 (Ctrl+2)",
     "tipDiff": "差分切替 (Ctrl+3)",
     "tipEditPreview": "編集 + プレビュー",
-    "tipAll": "全ペイン表示"
+    "tipAll": "全ペイン表示",
+    "toc": "目次",
+    "tipToc": "目次の切替"
   },
   "statusBar": {
     "ln": "行",

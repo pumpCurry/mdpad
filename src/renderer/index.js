@@ -29,7 +29,7 @@ import { initFormatContextMenu } from "./components/format-context-menu.js";
 import { initFormatToolbar, setFormatBarMode, getFormatBarMode } from "./components/format-toolbar.js";
 import { getFormatCommand, isFormatActive } from "./components/format-commands.js";
 import { initEmojiPicker } from "./components/emoji-picker.js";
-import { initTocPane, updateToc, toggleTocPane } from "./components/toc-pane.js";
+import { initTocPane, updateToc, updateTocHighlight, updateTocViewport } from "./components/toc-pane.js";
 import { renderMarkdown } from "./lib/markdown-engine.js";
 
 // Application state
@@ -80,7 +80,7 @@ async function init() {
   // Init emoji picker (registers callback with toolbar)
   initEmojiPicker();
 
-  // Init TOC (Table of Contents) sidebar pane
+  // Init TOC (Table of Contents) pane
   initTocPane();
 
   // Init preview
@@ -102,6 +102,11 @@ async function init() {
     if (state.diff) {
       updateDiff(getContent(), originalContent);
     }
+    // TOC 表示状態を localStorage に保存し、表示時は内容を即座に更新
+    localStorage.setItem("mdpad:tocVisible", String(state.toc));
+    if (state.toc) {
+      updateToc(getContent());
+    }
     updateButtonStates();
   });
 
@@ -119,13 +124,31 @@ async function init() {
       if (state.preview) {
         syncEditorToPreview(editor, document.querySelector("#preview-pane .preview-content"));
       }
+      // TOC ビューポート追随: エディタの表示範囲内の見出しをハイライト
+      if (state.toc) {
+        const scrollTop = editor.scrollDOM.scrollTop;
+        const clientHeight = editor.scrollDOM.clientHeight;
+        const topBlock = editor.lineBlockAtHeight(scrollTop);
+        const bottomBlock = editor.lineBlockAtHeight(scrollTop + clientHeight);
+        const topLine = editor.state.doc.lineAt(topBlock.from).number;
+        const bottomLine = editor.state.doc.lineAt(bottomBlock.from).number;
+        updateTocViewport(topLine, bottomLine);
+      }
     });
   }
 
-  // Editor cursor/selection update for status bar
+  // Editor cursor/selection update for status bar + TOC カーソル追随
   const editorView = getEditor();
   if (editorView) {
-    setInterval(updateStatusBar, 200);
+    setInterval(() => {
+      updateStatusBar();
+      // TOC カーソル追随: カーソルが属する見出しセクションをハイライト
+      const state = getPaneState();
+      if (state.toc) {
+        const info = getCursorInfo();
+        updateTocHighlight(info.line);
+      }
+    }, 200);
   }
 
   // Diff update function (called from diff-pane when mode changes)
@@ -494,10 +517,13 @@ async function handleMenuAction(action) {
       break;
     case "toggleToc":
       {
-        toggleTocPane();
+        togglePane("toc");
+        updateButtonStates();
         // TOC が表示された場合、現在の内容で更新
-        const content = getContent();
-        if (content) updateToc(content);
+        if (getPaneState().toc) {
+          const content = getContent();
+          if (content) updateToc(content);
+        }
       }
       break;
     case "toggleLint":

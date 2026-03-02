@@ -10,10 +10,10 @@
  * win-unpacked が存在しない場合はフルビルドを実行する。
  *
  * @file build-installer.js
- * @version 0.1.10020
+ * @version 1.1.00066
  * @since 0.1.10020
- * @revision 2
- * @lastModified 2026-02-28 20:45:00 (JST)
+ * @revision 3
+ * @lastModified 2026-03-02 03:00:00 (JST)
  */
 
 const { execSync } = require("child_process");
@@ -67,11 +67,14 @@ if (usePrepackaged) {
 }
 
 // electron-builder を実行してNSISインストーラを生成
+// MDPAD_DISPLAY_VERSION を環境変数として渡すことで、
+// electron-builder.yml の artifactName や NSIS defines から参照できるようにする。
+// これにより、NSIS インストーラの UI およびファイル名に5桁ゼロパディングのバージョンが使用される。
 try {
   execSync(cmd, {
     cwd: rootDir,
     stdio: "inherit",
-    env: { ...process.env },
+    env: { ...process.env, MDPAD_DISPLAY_VERSION: fullVersion },
   });
   console.log(`\nInstaller built successfully: mdpad-${fullVersion}-setup.exe`);
 } catch (err) {
