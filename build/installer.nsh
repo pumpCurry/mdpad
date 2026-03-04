@@ -23,8 +23,8 @@
 ;
 ; Version: 1.1.00068
 ; Since: 1.1.00066
-; Revision: 4
-; LastModified: 2026-03-04 22:30:00 (JST)
+; Revision: 5
+; LastModified: 2026-03-04 23:00:00 (JST)
 
 ; ============================================================
 ; 1. バージョン上書き（ゼロパディング表示用）
@@ -46,11 +46,20 @@
 !include "nsDialogs.nsh"
 !include "LogicLib.nsh"
 
-; customHeader マクロ: electron-builder テンプレートのトップレベルで展開される。
-; MUI_PAGE_CUSTOM はトップレベルのページ宣言として呼ぶ必要があるため、
-; ここに配置する。customInit（.onInit 内）に置くとページとして認識されない。
+; customHeader マクロ: electron-builder テンプレートのトップレベル（MUI2.nsh 後）で展開。
+; 空マクロ。カスタムページは customPageAfterChangeDir で登録する。
 !macro customHeader
-  !insertmacro MUI_PAGE_CUSTOM fileAssocPage fileAssocPageLeave
+!macroend
+
+; ============================================================
+; 2b. customPageAfterChangeDir: ディレクトリ選択後のカスタムページ登録
+; ============================================================
+; assistedInstaller.nsh が MUI_PAGE_DIRECTORY の直後、MUI_PAGE_INSTFILES の直前で
+; このマクロを展開する。「Page custom」ディレクティブで nsDialogs ページを挿入する。
+; ※ MUI_PAGE_CUSTOM は MUI2 標準マクロではないため、NSIS ネイティブの
+;    「Page custom」ディレクティブを使用する。
+!macro customPageAfterChangeDir
+  Page custom fileAssocPage fileAssocPageLeave
 !macroend
 
 ; ============================================================
