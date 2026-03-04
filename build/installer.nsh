@@ -21,10 +21,10 @@
 ; - NSIS の $%ENV_VAR% 構文はコンパイル時に展開されるため、
 ;   環境変数が存在すれば VERSION が上書きされる。
 ;
-; Version: 1.1.00067
+; Version: 1.1.00068
 ; Since: 1.1.00066
-; Revision: 3
-; LastModified: 2026-03-04 01:00:00 (JST)
+; Revision: 4
+; LastModified: 2026-03-04 22:30:00 (JST)
 
 ; ============================================================
 ; 1. バージョン上書き（ゼロパディング表示用）
@@ -37,13 +37,18 @@
 !define VERSION "$%MDPAD_DISPLAY_VERSION%"
 
 ; ============================================================
-; 2. カスタムページ用のヘッダ（nsDialogs / LogicLib の読み込み）
+; 2. nsDialogs / LogicLib の読み込み（ファイル先頭で !include）
 ; ============================================================
-; customHeader マクロは electron-builder の NSIS テンプレート先頭で展開される。
-; ここで nsDialogs と LogicLib を !include して、カスタムページで使用する。
+; nsDialogs のマクロ（NSD_CreateLabel, NSD_CreateCheckbox 等）を
+; Function 定義内で使用するため、!include は Function 定義より前に置く必要がある。
+; ※ customHeader マクロ内に置くと、マクロ展開前に Function がパースされて
+;    "Invalid command" エラーになるため、ファイル先頭で直接 include する。
+!include "nsDialogs.nsh"
+!include "LogicLib.nsh"
+
+; customHeader マクロ: electron-builder テンプレートが要求するが、
+; !include はファイル先頭で済んでいるため空マクロとする。
 !macro customHeader
-  !include "nsDialogs.nsh"
-  !include "LogicLib.nsh"
 !macroend
 
 ; ============================================================
