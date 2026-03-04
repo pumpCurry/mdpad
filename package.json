@@ -1,6 +1,6 @@
 {
   "name": "mdpad",
-  "version": "1.1.00068",
+  "version": "1.1.00077",
   "description": "GitHub-flavored Markdown editor with live preview and diff",
   "main": "src/main/main.js",
   "scripts": {

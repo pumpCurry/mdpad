@@ -2,7 +2,7 @@
 
 # mdpad - Update History
 
-## v1.1.00068 (2026-03-04)
+## v1.1.00077 (2026-03-04)
 
 ### 🐛 Bug Fixes
 - **Preview mode fix**: Fixed issue where preview mode did not activate when opening files from Explorer (double-click or "Open with"). Root cause: `onApplyPaneConfig` IPC listener was registered after multiple `await` calls in `init()`, causing the `apply-pane-config` message from `did-finish-load` to be lost. Moved all IPC listeners to the top of `init()` (before the first `await`)
