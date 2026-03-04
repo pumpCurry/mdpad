@@ -279,7 +279,7 @@
   },
   "update": {
     "checking": "アップデートを確認中...",
-    "upToDate": "最新バージョンをお使いです",
+    "upToDate": "最新バージョンの{appName}をお使いです",
     "available": "mdpadの新しいバージョンが利用可能です！",
     "currentVersion": "現在のバージョン:",
     "latestVersion": "最新バージョン:",

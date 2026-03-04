@@ -21,6 +21,16 @@ extraMetadata:
   description: mdpad
   author: "5r4ce2"
 
+fileAssociations:
+  - ext: md
+    name: "Markdown File"
+    description: "Markdownファイル"
+    role: Editor
+  - ext: markdown
+    name: "Markdown File"
+    description: "Markdownファイル"
+    role: Editor
+
 win:
   target:
     - target: dir

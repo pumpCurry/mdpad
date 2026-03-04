@@ -57,6 +57,25 @@ let _pendingPaneConfig = null;
 
 // Initialize components
 async function init() {
+  // === IPC リスナーを最初に登録（did-finish-load との競合を防止） ===
+  // main.js の did-finish-load コールバックが、init() 内の await 中に
+  // IPC メッセージを送信する可能性がある。リスナーが未登録だとメッセージが
+  // 消失するため、すべての await より前に登録する必要がある。
+
+  // ペイン設定リスナー: ファイル未読み込み時は pending に保留
+  window.mdpad.onApplyPaneConfig((config) => {
+    if (!currentFilePath) {
+      _pendingPaneConfig = config;
+    } else {
+      applyExternalOpenLayout(config);
+    }
+  });
+
+  // メニューアクションリスナー（ファイルオープン、トグル操作など）
+  window.mdpad.onMenuAction((action) => {
+    handleMenuAction(action);
+  });
+
   // Get locale from main process and initialize i18n
   const locale = await window.mdpad.getLocale();
   initI18n(locale);
@@ -161,10 +180,7 @@ async function init() {
     triggerGlobalSearchUpdate();
   };
 
-  // Menu action handler
-  window.mdpad.onMenuAction((action) => {
-    handleMenuAction(action);
-  });
+  // 注: onMenuAction リスナーは init() 先頭で登録済み（レースコンディション防止）
 
   // Status bar click → Go to Line
   window.addEventListener("mdpad:goToLine", () => showGoToLineDialog());
@@ -282,16 +298,7 @@ async function init() {
     }
   });
 
-  // Pane config listener (for external file open smart layout)
-  // ファイルがまだ読み込まれていない場合は pending に保存し、
-  // loadFileByPath 完了後に適用する（レースコンディション回避）
-  window.mdpad.onApplyPaneConfig((config) => {
-    if (!currentFilePath) {
-      _pendingPaneConfig = config;
-    } else {
-      applyExternalOpenLayout(config);
-    }
-  });
+  // 注: onApplyPaneConfig リスナーは init() 先頭で登録済み（レースコンディション防止）
 
   // Check for crash recovery: sessions first, then autosave backups
   // Skip if this window was opened with a file (e.g. drop, file association)
@@ -815,12 +822,14 @@ async function showCheckForUpdatesDialog() {
     dialog.insertBefore(iconEl, dialog.firstChild);
 
     const titleEl = document.createElement("div");
-    titleEl.textContent = t("update.upToDate");
+    // i18n テンプレート内の {appName} をアプリ名で置換
+    titleEl.textContent = t("update.upToDate").replace("{appName}", "mdpad");
     titleEl.style.cssText = "font-size:16px;font-weight:600;color:#24292f;margin-bottom:8px;";
     dialog.appendChild(titleEl);
 
     const verEl = document.createElement("div");
-    verEl.textContent = result.currentVersion;
+    // バージョン表示にアプリ名を先頭に追加
+    verEl.textContent = `mdpad ${result.currentVersion}`;
     verEl.style.cssText =
       "font-size:13px;color:#8b949e;margin-bottom:16px;" +
       "font-family:'SF Mono',Consolas,'Liberation Mono',Menlo,monospace;";
