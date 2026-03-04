@@ -46,9 +46,11 @@
 !include "nsDialogs.nsh"
 !include "LogicLib.nsh"
 
-; customHeader マクロ: electron-builder テンプレートが要求するが、
-; !include はファイル先頭で済んでいるため空マクロとする。
+; customHeader マクロ: electron-builder テンプレートのトップレベルで展開される。
+; MUI_PAGE_CUSTOM はトップレベルのページ宣言として呼ぶ必要があるため、
+; ここに配置する。customInit（.onInit 内）に置くとページとして認識されない。
 !macro customHeader
+  !insertmacro MUI_PAGE_CUSTOM fileAssocPage fileAssocPageLeave
 !macroend
 
 ; ============================================================
@@ -116,11 +118,11 @@ Function fileAssocPageLeave
 FunctionEnd
 
 ; ============================================================
-; 5. customInit: カスタムページをインストーラに登録
+; 5. customInit: .onInit で展開されるマクロ
 ; ============================================================
-; electron-builder の NSIS テンプレート内の .onInit 関数で展開される。
+; MUI_PAGE_CUSTOM は customHeader に移動済み（トップレベルで宣言する必要があるため）。
+; customInit は electron-builder テンプレートが要求するため空マクロとして残す。
 !macro customInit
-  !insertmacro MUI_PAGE_CUSTOM fileAssocPage fileAssocPageLeave
 !macroend
 
 ; ============================================================
