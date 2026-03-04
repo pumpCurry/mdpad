@@ -2,6 +2,24 @@
 
 # mdpad - Update History
 
+## v1.1.00068 (2026-03-04)
+
+### 🐛 Bug Fixes
+- **Preview mode fix**: Fixed issue where preview mode did not activate when opening files from Explorer (double-click or "Open with"). Root cause: `onApplyPaneConfig` IPC listener was registered after multiple `await` calls in `init()`, causing the `apply-pane-config` message from `did-finish-load` to be lost. Moved all IPC listeners to the top of `init()` (before the first `await`)
+
+### 🆕 Installer Enhancements
+- **File association**: Register mdpad as the default program for `.md` / `.markdown` files (electron-builder `fileAssociations` config)
+- **Right-click menu "Open with mdpad"**: NSIS custom page (nsDialogs) with checkboxes for selecting extension groups during installation. Supported: Markdown (.md/.markdown), Text (.txt/.text), HTML (.html/.htm), MDX (.mdx). Writes to `HKCU\Software\Classes\{ext}\shell\mdpad` registry. All entries automatically removed on uninstall
+- **Windows 10**: Shows directly in right-click menu. **Windows 11**: Shows in "Show more options" submenu
+
+### 🔧 Improvements
+- **Update check dialog**: Changed message to "You're using the latest version of mdpad" with "mdpad" prefix before version number
+
+### 🧪 Tests
+- **Smoke test stabilization**: Changed status bar cursor position test (step 8) to polling approach, eliminating flaky failures caused by `requestAnimationFrame` scheduling delays
+
+---
+
 ## v1.1.00066 (2026-03-02)
 
 ### 🆕 TOC Pane Promotion (Sidebar → Full Pane)

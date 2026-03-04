@@ -1,5 +1,13 @@
 /**
- * EXE Smoke Test for mdpad — Comprehensive Regression Suite
+ * @fileoverview EXE Smoke Test for mdpad — Comprehensive Regression Suite
+ * @description EXE ビルドを起動し、CDP（Chrome DevTools Protocol）経由で
+ *   全機能の動作を自動検証するスモークテストスイート。
+ *   リカバリモーダル、ステータスバー、ペインマネージャ、エディタ操作、
+ *   検索/置換、フォーマット、プレビュー、ダイアログ等を網羅する。
+ * @file smoke-test.js
+ * @version 1.1.00068
+ * @revision 1
+ * @lastModified 2026-03-04 22:00:00 (JST)
  *
  * ~131-step test covering ALL features with actual behavior verification:
  *
@@ -476,7 +484,7 @@ async function main() {
     stepOK("Line count: " + linesText);
 
     stepStart("Cursor position updates on move...");
-    // Move cursor to line 3
+    // カーソルを行3に移動（CDP 経由で直接 dispatch）
     await cdp.evaluate(`
       (function() {
         var view = window.__mdpadEditor();
@@ -484,8 +492,14 @@ async function main() {
         view.dispatch({ selection: { anchor: line3.from } });
       })()
     `);
-    await sleep(500);
-    const cursorAfterMove = await cdp.evaluate(`document.getElementById("sb-cursor").textContent`);
+    // ステータスバー更新は setInterval(200ms) + requestAnimationFrame の2段階。
+    // 固定待機では rAF 遅延によりフレーキーになるため、ポーリングで待機する。
+    let cursorAfterMove = "";
+    for (let pollAttempt = 0; pollAttempt < 10; pollAttempt++) {
+      await sleep(200);
+      cursorAfterMove = await cdp.evaluate(`document.getElementById("sb-cursor").textContent`);
+      if (cursorAfterMove.includes("3")) break;
+    }
     if (!cursorAfterMove.includes("3")) throw new Error("Cursor not on line 3: " + cursorAfterMove);
     stepOK("Cursor moved to line 3: " + cursorAfterMove);
 

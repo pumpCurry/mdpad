@@ -20,6 +20,16 @@ asar: false
 extraMetadata:
   description: mdpad
 
+fileAssociations:
+  - ext: md
+    name: "Markdown File"
+    description: "Markdownファイル"
+    role: Editor
+  - ext: markdown
+    name: "Markdown File"
+    description: "Markdownファイル"
+    role: Editor
+
 win:
   target:
     - target: dir
