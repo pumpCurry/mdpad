@@ -23,8 +23,8 @@
 ;
 ; Version: 1.1.00068
 ; Since: 1.1.00066
-; Revision: 5
-; LastModified: 2026-03-04 23:00:00 (JST)
+; Revision: 6
+; LastModified: 2026-03-04 23:30:00 (JST)
 
 ; ============================================================
 ; 1. バージョン上書き（ゼロパディング表示用）
@@ -37,27 +37,29 @@
 !define VERSION "$%MDPAD_DISPLAY_VERSION%"
 
 ; ============================================================
-; 2. nsDialogs / LogicLib の読み込み（ファイル先頭で !include）
+; 2. nsDialogs / LogicLib の読み込み + カスタムページ宣言
 ; ============================================================
 ; nsDialogs のマクロ（NSD_CreateLabel, NSD_CreateCheckbox 等）を
 ; Function 定義内で使用するため、!include は Function 定義より前に置く必要がある。
-; ※ customHeader マクロ内に置くと、マクロ展開前に Function がパースされて
-;    "Invalid command" エラーになるため、ファイル先頭で直接 include する。
 !include "nsDialogs.nsh"
 !include "LogicLib.nsh"
 
-; customHeader マクロ: electron-builder テンプレートのトップレベル（MUI2.nsh 後）で展開。
-; 空マクロ。カスタムページは customPageAfterChangeDir で登録する。
+; カスタムページ宣言（トップレベル）
+; electron-builder のテンプレートは installer.nsh をトップレベルで !include する。
+; NSIS のページはスクリプト中の宣言順で表示されるが、electron-builder テンプレート側の
+; MUI ページ宣言（assistedInstaller.nsh 内）は本ファイルの include 後に処理されるため、
+; ここで宣言したページはウィザードの先頭に表示される。
+; ※ assistedInstaller.nsh の customPageAfterChangeDir フックもマクロで定義するが、
+;    テンプレート処理のタイミングでマクロが未登録と判定される場合があるため、
+;    確実に動作するようトップレベルでも宣言する。
+Page custom fileAssocPage fileAssocPageLeave
+
+; customHeader マクロ: electron-builder テンプレートが要求するため空マクロとして定義。
 !macro customHeader
 !macroend
 
-; ============================================================
-; 2b. customPageAfterChangeDir: ディレクトリ選択後のカスタムページ登録
-; ============================================================
-; assistedInstaller.nsh が MUI_PAGE_DIRECTORY の直後、MUI_PAGE_INSTFILES の直前で
-; このマクロを展開する。「Page custom」ディレクティブで nsDialogs ページを挿入する。
-; ※ MUI_PAGE_CUSTOM は MUI2 標準マクロではないため、NSIS ネイティブの
-;    「Page custom」ディレクティブを使用する。
+; customPageAfterChangeDir: assistedInstaller.nsh がサポートする場合に
+; ディレクトリ選択後にページを挿入するフック（フォールバック用）。
 !macro customPageAfterChangeDir
   Page custom fileAssocPage fileAssocPageLeave
 !macroend
