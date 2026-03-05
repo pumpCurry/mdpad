@@ -2,7 +2,7 @@
 
 # mdpad - Update History
 
-## v1.1.00080 (2026-03-05)
+## v1.1.00081 (2026-03-05)
 
 ### 🐛 Bug Fixes
 - **Format command cursor position fix**: Fixed cursor placement issues when executing format commands from toolbar or context menu
