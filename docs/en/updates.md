@@ -2,6 +2,22 @@
 
 # mdpad - Update History
 
+## v1.1.00080 (2026-03-05)
+
+### 🐛 Bug Fixes
+- **Format command cursor position fix**: Fixed cursor placement issues when executing format commands from toolbar or context menu
+  - Headings (H1-H6), bullet list, numbered list, blockquote, checkbox: Added explicit `selection` to `toggleLinePrefix`/`toggleTaskList` to prevent cursor jumping to line start
+  - Code block, table, horizontal rule, details, definition list: Added `$0` cursor marker support to `insertBlock` for correct input position
+  - Horizontal rule mid-line insertion: Added line-split logic to ensure `---` is always on its own line
+  - Escape processing: Added selection for selected text case
+  - Context menu focus order unified with toolbar (`cmd.fn()` → `focus()`)
+- **Menu format bar mode sync**: Fixed radio buttons in "View → Format Bar" submenu not matching actual display. Format bar mode is now managed in the main process with `checked` state properly set during menu construction
+
+### 🆕 New Module
+- **view-state.js**: Main process view state manager. Persists format bar mode to `mdpad-config.json` for menu radio button synchronization
+
+---
+
 ## v1.1.00077 (2026-03-04)
 
 ### 🐛 Bug Fixes
