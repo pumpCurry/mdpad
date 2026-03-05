@@ -96,6 +96,13 @@ async function init() {
   // Init format toolbar (topbar/sidebar/hidden)
   initFormatToolbar();
 
+  // メインプロセスのメニュー状態を同期（localStorage の書式バーモードを反映）
+  // レンダラー起動時に localStorage から読み込んだモードをメインプロセスに通知し、
+  // メニューのラジオボタン checked 状態を正しく設定する
+  if (window.mdpad.setFormatBarModeMain) {
+    window.mdpad.setFormatBarModeMain(getFormatBarMode());
+  }
+
   // Init emoji picker (registers callback with toolbar)
   initEmojiPicker();
 

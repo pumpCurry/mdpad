@@ -55,6 +55,10 @@ export function initFormatToolbar() {
 export function setFormatBarMode(mode) {
   currentMode = mode;
   localStorage.setItem(STORAGE_KEY, mode);
+  // メインプロセスのメニュー状態を同期（ラジオボタンの checked を更新）
+  if (window.mdpad && window.mdpad.setFormatBarModeMain) {
+    window.mdpad.setFormatBarModeMain(mode);
+  }
   renderFormatBar();
 }
 
