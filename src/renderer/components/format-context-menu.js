@@ -175,11 +175,13 @@ function createMenuItem(cmd) {
     e.preventDefault();
     e.stopPropagation();
     closeContextMenu();
-    // Get fresh editor reference at click time (matches toolbar pattern)
+    // cmd.fn() → focus() の順序でツールバー（format-toolbar.js）と統一
+    // cmd.fn() は view.state.selection を直接読むためフォーカス有無に非依存
+    // focus() は dispatch 完了後にユーザー入力を受け付けるための後処理
     const currentView = getEditor();
     if (currentView && cmd.fn) {
-      currentView.focus();
       cmd.fn(currentView);
+      currentView.focus();
     }
   });
 

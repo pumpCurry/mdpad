@@ -1,9 +1,16 @@
 /**
- * format-commands.js
+ * @fileoverview CodeMirror 6 ベースの Markdown 書式エンジン。
+ * インライン切替、行プレフィクス切替、ブロック挿入、書式状態検出を提供。
+ * コンテキストメニュー、ツールバー、キーボードショートカットが共有するコマンドレジストリ。
  *
- * CodeMirror 6 based Markdown formatting engine.
- * Provides inline toggle, line prefix toggle, block insert, and format state detection.
- * Shared command registry used by context menu, toolbar, and keyboard shortcuts.
+ * @description format-commands.js — Markdown formatting engine
+ * @file format-commands.js
+ * @module format-commands
+ * @version 0.1.10020
+ * @revision 2
+ * @lastModified 2026-03-04 22:00:00 (JST)
+ * @todo
+ * - テーブル挿入時のセル選択サポート（$SELECT$ マーカー）
  */
 
 import { keymap } from "@codemirror/view";
@@ -134,10 +141,22 @@ export function toggleAsymmetricInline(view, openTag, closeTag) {
 // ─── Line Prefix Toggle ─────────────────────────────────────────────
 
 /**
- * Toggle a line prefix for the line(s) covered by the selection.
- * Options:
- *   exclusive: string[] — other prefixes to remove when applying (e.g., heading levels)
- *   numbered: boolean — auto-number lines (1. 2. 3. ...)
+ * 選択範囲（または現在行）の行プレフィクスを切り替える。
+ *
+ * 【詳細説明】
+ * - 対象全行がすでに同じプレフィクスを持つ場合は削除（トグルOFF）
+ * - それ以外の場合はプレフィクスを付与（トグルON）
+ * - exclusive オプションで排他的プレフィクス（例: 見出しレベル切替）を処理
+ * - numbered オプションで連番プレフィクス（1. 2. 3.）を自動付番
+ * - 変更後のカーソル位置は明示的に計算し、元の相対位置を保持する
+ *
+ * @function toggleLinePrefix
+ * @param {EditorView} view - CodeMirror EditorView インスタンス
+ * @param {string} prefix - 行頭に付与するプレフィクス文字列（例: "# ", "- ", "> "）
+ * @param {Object} [options={}] - オプション
+ * @param {string[]} [options.exclusive] - 排他的プレフィクス配列（付与時に除去する）
+ * @param {boolean} [options.numbered] - true の場合、連番プレフィクス（1. 2. ...）を使用
+ * @returns {boolean} - 常に true（コマンド処理完了）
  */
 export function toggleLinePrefix(view, prefix, options = {}) {
   const { state } = view;
@@ -147,13 +166,13 @@ export function toggleLinePrefix(view, prefix, options = {}) {
   const lastLine = state.doc.lineAt(to);
   const changes = [];
 
-  // Collect lines
+  // 対象行を収集
   const lines = [];
   for (let ln = firstLine.number; ln <= lastLine.number; ln++) {
     lines.push(state.doc.line(ln));
   }
 
-  // Check if ALL lines already have this prefix
+  // 全行がすでにこのプレフィクスを持っているか判定
   const allHave = lines.every((line) => {
     if (options.numbered) {
       return /^\d+\.\s/.test(line.text);
@@ -162,7 +181,7 @@ export function toggleLinePrefix(view, prefix, options = {}) {
   });
 
   if (allHave) {
-    // Remove prefix from all lines
+    // プレフィクスを全行から除去（トグルOFF）
     for (const line of lines) {
       if (options.numbered) {
         const m = line.text.match(/^\d+\.\s/);
@@ -174,10 +193,10 @@ export function toggleLinePrefix(view, prefix, options = {}) {
       }
     }
   } else {
-    // Apply prefix to all lines
+    // プレフィクスを全行に付与（トグルON）
     let num = 1;
     for (const line of lines) {
-      // Remove exclusive prefixes first
+      // 排他的プレフィクスを先に除去
       let removeLen = 0;
       if (options.exclusive) {
         for (const excl of options.exclusive) {
@@ -187,14 +206,13 @@ export function toggleLinePrefix(view, prefix, options = {}) {
           }
         }
       }
-      // Also remove existing numbered prefix if switching to non-numbered
+      // 非連番モードで連番プレフィクスがある場合も除去
       if (!options.numbered && /^\d+\.\s/.test(line.text)) {
         const m = line.text.match(/^\d+\.\s/);
         if (m) removeLen = m[0].length;
       }
-      // Remove existing prefix of same type if partially applied
+      // 同じプレフィクスが既にある行はスキップ（再付与不要）
       if (!options.numbered && line.text.startsWith(prefix)) {
-        // Already has prefix — will be added back, so skip
         continue;
       }
 
@@ -204,7 +222,17 @@ export function toggleLinePrefix(view, prefix, options = {}) {
   }
 
   if (changes.length > 0) {
-    view.dispatch({ changes });
+    // 元のカーソル/選択位置を変更後のドキュメント上にマッピングし、明示的に設定
+    // （デフォルトマッピング依存ではなく、toggleInlineFormat と同じパターンで制御）
+    const changeDesc = state.changes(changes);
+    const newFrom = changeDesc.mapPos(from, 1);
+    const newTo = from === to ? newFrom : changeDesc.mapPos(to, 1);
+    view.dispatch({
+      changes,
+      selection: from === to
+        ? EditorSelection.cursor(newFrom)
+        : EditorSelection.range(newFrom, newTo),
+    });
   }
   return true;
 }
@@ -212,9 +240,22 @@ export function toggleLinePrefix(view, prefix, options = {}) {
 // ─── Block Insert ────────────────────────────────────────────────────
 
 /**
- * Insert a block template at the cursor position.
- * If template is a function, it receives the selected text as argument.
- * Ensures blank lines before and after the block.
+ * ブロックテンプレートをカーソル位置に挿入する。
+ *
+ * 【詳細説明】
+ * - template が関数の場合、選択テキストを引数として呼び出す
+ * - テンプレート内の `$0` をカーソル位置マーカーとして扱い、
+ *   挿入後に `$0` の位置にカーソルを配置する（`$0` 自体は除去される）
+ * - `$0` が無い場合はブロック末尾にカーソルを配置する
+ * - ブロック前後に空行が必要な場合は自動挿入する
+ * - カーソルが行の途中にある場合（前方にテキストがある場合）は
+ *   改行を挿入してブロックが独立行になるようにする
+ *
+ * @function insertBlock
+ * @param {EditorView} view - CodeMirror EditorView インスタンス
+ * @param {string|function} template - 挿入テンプレート文字列、または (selText) => string の関数。
+ *   テンプレート内に `$0` を含めるとカーソル位置を指定できる。
+ * @returns {boolean} - 常に true（コマンド処理完了）
  */
 export function insertBlock(view, template) {
   const { state } = view;
@@ -224,23 +265,45 @@ export function insertBlock(view, template) {
 
   const block = typeof template === "function" ? template(selText) : template;
 
-  // Check if we need blank lines before/after
-  const lineObj = state.doc.lineAt(from);
-  const prevLine = lineObj.number > 1 ? state.doc.line(lineObj.number - 1) : null;
-  const needBlankBefore = prevLine && prevLine.text.trim() !== "" && from === lineObj.from;
-  const prefix = needBlankBefore ? "\n" : "";
+  // カーソル位置マーカー `$0` を検出し、除去してカーソルオフセットを記録
+  const CURSOR_MARKER = "$0";
+  let blockClean = block;
+  let cursorInBlock = -1;
+  const markerIdx = blockClean.indexOf(CURSOR_MARKER);
+  if (markerIdx !== -1) {
+    cursorInBlock = markerIdx;
+    blockClean = blockClean.slice(0, markerIdx) + blockClean.slice(markerIdx + CURSOR_MARKER.length);
+  }
 
-  // Check line after insertion point
+  // カーソルが行の途中にある場合、改行を挿入してブロックを独立行にする
+  // （水平線 --- 等のブロック要素が文中に埋まるのを防止する）
+  const lineObj = state.doc.lineAt(from);
+  const textBeforeCursor = state.sliceDoc(lineObj.from, from);
+  const needLineSplit = textBeforeCursor.length > 0 && from !== lineObj.from;
+
+  // ブロック前の空行チェック（行頭にいて、前行が空でない場合）
+  const prevLine = lineObj.number > 1 ? state.doc.line(lineObj.number - 1) : null;
+  const needBlankBefore = !needLineSplit && prevLine && prevLine.text.trim() !== "" && from === lineObj.from;
+
+  // 行分離が必要なら改行、空行が必要なら改行、それ以外は空文字
+  const prefix = needLineSplit ? "\n" : (needBlankBefore ? "\n" : "");
+
+  // ブロック後の空行チェック
   const endLineObj = state.doc.lineAt(to);
   const nextLine = endLineObj.number < state.doc.lines ? state.doc.line(endLineObj.number + 1) : null;
   const needBlankAfter = nextLine && nextLine.text.trim() !== "" && to === endLineObj.to;
   const suffix = needBlankAfter ? "\n" : "";
 
-  const insertText = prefix + block + suffix;
+  const insertText = prefix + blockClean + suffix;
+
+  // カーソル位置の計算: $0 マーカーがあればその位置、なければブロック末尾
+  const anchor = cursorInBlock !== -1
+    ? from + prefix.length + cursorInBlock
+    : from + insertText.length;
 
   view.dispatch({
     changes: { from, to, insert: insertText },
-    selection: { anchor: from + insertText.length },
+    selection: { anchor },
   });
   return true;
 }
@@ -298,19 +361,34 @@ export function insertImage(view) {
 
 // ─── Escape ──────────────────────────────────────────────────────────
 
+/**
+ * Markdown 特殊文字をバックスラッシュでエスケープする。
+ *
+ * 【詳細説明】
+ * - テキスト選択時: 選択範囲内の特殊文字をすべてエスケープし、
+ *   エスケープ後のテキストを選択状態にする
+ * - テキスト未選択時: カーソル位置にバックスラッシュを挿入し、
+ *   カーソルをバックスラッシュの後ろに配置する
+ *
+ * @function insertEscape
+ * @param {EditorView} view - CodeMirror EditorView インスタンス
+ * @returns {boolean} - 常に true（コマンド処理完了）
+ */
 export function insertEscape(view) {
   const { state } = view;
   const from = state.selection.main.from;
   const to = state.selection.main.to;
 
   if (from !== to) {
-    // Escape each special char in selection
+    // 選択範囲の各特殊文字をエスケープし、結果を選択状態にする
     const selText = state.sliceDoc(from, to);
     const escaped = selText.replace(/([\\`*_{}\[\]()#+\-.!|~>])/g, "\\$1");
     view.dispatch({
       changes: { from, to, insert: escaped },
+      selection: { anchor: from, head: from + escaped.length },
     });
   } else {
+    // カーソル位置にバックスラッシュを挿入
     view.dispatch({
       changes: { from, to: from, insert: "\\" },
       selection: { anchor: from + 1 },
@@ -331,6 +409,19 @@ function toggleHeading(view, level) {
 
 // ─── Task List ───────────────────────────────────────────────────────
 
+/**
+ * タスクリスト（チェックボックス）のプレフィクスを切り替える。
+ *
+ * 【詳細説明】
+ * - 全行が `- [ ] ` または `- [x] ` で始まる場合は削除（トグルOFF）
+ * - それ以外の場合は `- [ ] ` を付与（トグルON）
+ * - 既存のリストマーカー（`- `, `* `, `1. ` 等）は自動で置き換え
+ * - 変更後のカーソル位置は明示的に計算し、元の相対位置を保持する
+ *
+ * @function toggleTaskList
+ * @param {EditorView} view - CodeMirror EditorView インスタンス
+ * @returns {boolean} - 常に true（コマンド処理完了）
+ */
 export function toggleTaskList(view) {
   const { state } = view;
   const from = state.selection.main.from;
@@ -347,6 +438,7 @@ export function toggleTaskList(view) {
   const allHave = lines.every((l) => /^- \[([ x])\] /.test(l.text));
 
   if (allHave) {
+    // タスクリストプレフィクスを全行から除去
     for (const line of lines) {
       const m = line.text.match(/^- \[[ x]\] /);
       if (m) {
@@ -354,11 +446,12 @@ export function toggleTaskList(view) {
       }
     }
   } else {
+    // タスクリストプレフィクスを全行に付与
     for (const line of lines) {
-      // Remove existing list markers first
+      // 既存のリストマーカーがあれば置き換え
       let removeLen = 0;
       if (/^- \[[ x]\] /.test(line.text)) {
-        continue; // Already task list
+        continue; // 既にタスクリスト形式の行はスキップ
       } else if (line.text.startsWith("- ") || line.text.startsWith("* ")) {
         removeLen = 2;
       } else if (/^\d+\.\s/.test(line.text)) {
@@ -370,7 +463,16 @@ export function toggleTaskList(view) {
   }
 
   if (changes.length > 0) {
-    view.dispatch({ changes });
+    // 元のカーソル/選択位置を変更後のドキュメント上にマッピングし、明示的に設定
+    const changeDesc = state.changes(changes);
+    const newFrom = changeDesc.mapPos(from, 1);
+    const newTo = from === to ? newFrom : changeDesc.mapPos(to, 1);
+    view.dispatch({
+      changes,
+      selection: from === to
+        ? EditorSelection.cursor(newFrom)
+        : EditorSelection.range(newFrom, newTo),
+    });
   }
   return true;
 }
@@ -629,7 +731,7 @@ export const FORMAT_COMMANDS = [
     id: "codeBlock",
     fn: (view) =>
       insertBlock(view, (sel) =>
-        sel ? "```\n" + sel + "\n```" : "```\n\n```"
+        sel ? "```\n" + sel + "\n```" : "```\n$0\n```"
       ),
     icon: "{ }",
     iconStyle: "font-family:monospace;font-size:10px",
@@ -643,7 +745,7 @@ export const FORMAT_COMMANDS = [
     fn: (view) =>
       insertBlock(
         view,
-        "| Column 1 | Column 2 | Column 3 |\n| --- | --- | --- |\n| cell | cell | cell |"
+        "| $0Column 1 | Column 2 | Column 3 |\n| --- | --- | --- |\n| cell | cell | cell |"
       ),
     icon: "\u25A6",
     i18nKey: "format.table",
@@ -651,7 +753,7 @@ export const FORMAT_COMMANDS = [
   },
   {
     id: "horizontalRule",
-    fn: (view) => insertBlock(view, "---"),
+    fn: (view) => insertBlock(view, "---\n$0"),
     icon: "\u2500",
     i18nKey: "format.horizontalRule",
     group: "block",
@@ -662,7 +764,7 @@ export const FORMAT_COMMANDS = [
       insertBlock(
         view,
         (sel) =>
-          `<details>\n<summary>Summary</summary>\n\n${sel || "Content"}\n\n</details>`
+          `<details>\n<summary>Summary</summary>\n\n$0${sel || "Content"}\n\n</details>`
       ),
     icon: "\u25B6",
     i18nKey: "format.details",
@@ -673,8 +775,8 @@ export const FORMAT_COMMANDS = [
     fn: (view) =>
       insertBlock(view, (sel) =>
         sel
-          ? `${sel}\n: Definition`
-          : "Term\n: Definition"
+          ? `${sel}\n: $0Definition`
+          : "$0Term\n: Definition"
       ),
     icon: "DL",
     iconStyle: "font-size:10px;font-weight:bold",

@@ -25,6 +25,10 @@ const {
   getAutoReloadEnabled,
   setAutoReloadEnabled,
 } = require("./file-watch-settings");
+const {
+  initViewState,
+  setFormatBarMode: setMainFormatBarMode,
+} = require("./view-state");
 
 // Set AppUserModelId for Windows taskbar grouping and display name.
 // Must match electron-builder.yml appId. Called before app 'ready'.
@@ -327,6 +331,7 @@ function createWindow(openFilePath, paneConfig) {
     initSessionManager();
     initAutosaveManager();
     initFileWatchSettings();
+    initViewState();
 
     // IPC: get current locale for renderer
     ipcMain.handle("i18n:getLocale", () => getLocale());
@@ -401,6 +406,13 @@ function createWindow(openFilePath, paneConfig) {
     ipcMain.handle("fileWatch:setAutoReload", (_event, enabled) => {
       setAutoReloadEnabled(enabled);
       createMenu(null); // Rebuild menu
+    });
+
+    // IPC: ビュー状態同期（書式バーモード）
+    // レンダラーから書式バーモード変更通知を受け取り、メニューの checked 状態を同期する
+    ipcMain.handle("viewState:setFormatBarMode", (_event, mode) => {
+      setMainFormatBarMode(mode);
+      createMenu(null); // メニュー再構築で checked を反映
     });
 
     // IPC: open file in a new window (same process, different BrowserWindow)

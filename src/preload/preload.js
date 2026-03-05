@@ -72,6 +72,9 @@ contextBridge.exposeInMainWorld("mdpad", {
   getAutoReloadEnabled: () => ipcRenderer.invoke("fileWatch:getAutoReload"),
   setAutoReloadEnabled: (enabled) => ipcRenderer.invoke("fileWatch:setAutoReload", enabled),
 
+  // ビュー状態同期（書式バーモードをメインプロセスに通知してメニューの checked 状態を同期）
+  setFormatBarModeMain: (mode) => ipcRenderer.invoke("viewState:setFormatBarMode", mode),
+
   // DnD: get file path from File object (Electron 33+ requires webUtils)
   getFilePath: (file) => webUtils.getPathForFile(file),
 

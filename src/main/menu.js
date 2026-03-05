@@ -2,6 +2,7 @@ const { Menu, BrowserWindow } = require("electron");
 const { t, getLocale, setLocale, getSupportedLocales } = require("../i18n/i18n-main");
 const { getAutosaveMinutes } = require("./autosave-manager");
 const { getFileWatchEnabled, getAutoReloadEnabled } = require("./file-watch-settings");
+const { getFormatBarMode } = require("./view-state");
 const { getRecentFiles } = require("./recent-files");
 
 const localeLabels = {
@@ -40,6 +41,7 @@ function createMenu(_mainWindow) {
   const currentAutosave = getAutosaveMinutes();
   const currentFileWatch = getFileWatchEnabled();
   const currentAutoReload = getAutoReloadEnabled();
+  const currentFormatBar = getFormatBarMode();
 
   // Build recent files submenu
   const recentFiles = getRecentFiles();
@@ -234,16 +236,19 @@ function createMenu(_mainWindow) {
             {
               label: t("menu.view_formatBar_topbar"),
               type: "radio",
+              checked: currentFormatBar === "topbar",
               click: () => sendToTarget("menu:action", "setFormatBar:topbar"),
             },
             {
               label: t("menu.view_formatBar_sidebar"),
               type: "radio",
+              checked: currentFormatBar === "sidebar",
               click: () => sendToTarget("menu:action", "setFormatBar:sidebar"),
             },
             {
               label: t("menu.view_formatBar_hidden"),
               type: "radio",
+              checked: currentFormatBar === "hidden",
               click: () => sendToTarget("menu:action", "setFormatBar:hidden"),
             },
           ],
