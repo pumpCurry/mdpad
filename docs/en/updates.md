@@ -2,23 +2,36 @@
 
 # mdpad - Update History
 
-## v1.1.00083 (2026-03-05)
+## v1.1.00084 (2026-03-08)
 
 ### 🐛 Bug Fixes
-- **Format command cursor position fix**: Fixed cursor placement issues when executing format commands from toolbar or context menu
-  - Headings (H1-H6), bullet list, numbered list, blockquote, checkbox: Added explicit `selection` to `toggleLinePrefix`/`toggleTaskList` to prevent cursor jumping to line start
-  - Code block, table, horizontal rule, details, definition list: Added `$0` cursor marker support to `insertBlock` for correct input position
-  - Horizontal rule mid-line insertion: Added line-split logic to ensure `---` is always on its own line
-  - Escape processing: Added selection for selected text case
-  - Context menu focus order unified with toolbar (`cmd.fn()` → `focus()`)
-- **Menu format bar mode sync**: Fixed radio buttons in "View → Format Bar" submenu not matching actual display. Format bar mode is now managed in the main process with `checked` state properly set during menu construction
+- **Right-click context menu restoration and restructure**: Basic edit operations (undo/redo/cut/copy/paste/select all) were lost when formatting was implemented. Restructured as 3-level flyout menu: Level 1 = basic edit operations, Level 2 = "Formatting ▸" submenu, Level 3 = heading H1-H6 and color palette flyouts
+- **Context menu overlapping footer bar**: Applied `max-height: calc(100vh - 24px - 16px)` to account for the 24px status bar, preventing menu from overlapping the footer
 
-### 🆕 New Module
-- **view-state.js**: Main process view state manager. Persists format bar mode to `mdpad-config.json` for menu radio button synchronization
+### 🆕 New Features
+- **Color usage history**: Automatically saves up to 12 colors to `localStorage` on every `insertColor()` call. Displayed as "Recent Colors" section in both toolbar and context menu color palettes
+
+### 🏗 Installer
+- **Welcome page**: Added welcome page at installer startup showing app icon, title, version, and greeting message
+- **Header text display fix**: Fixed MUI2 control ID error (1028→1037). Was writing to the branding text at the bottom of the dialog instead of the header title, causing text overlap
+- **UAC elevation welcome page duplication fix**: Detects `${UAC_IsInnerInstance}` in `customInit` macro and skips welcome page on elevated restart
+- **Page order normalization**: Uses `customWelcomePage` / `customPageAfterChangeDir` template hooks to ensure correct page ordering. Removed top-level `Page custom` declarations
+- **Removed `fileAssociations` from `electron-builder.yml`**: Eliminated duplicate registration with NSIS custom page
 
 ---
 
-## v1.1.00077 (2026-03-04)
+## v1.1.00083 (2026-03-05)
+
+### 🐛 Bug Fixes
+- **Format command cursor position fix**: Added explicit `selection` to `toggleLinePrefix`/`toggleTaskList` for headings (H1-H6), bullets, numbered lists, quotes, and checkboxes, fixing cursor jumping to beginning of line. Added `$0` cursor markers to `insertBlock` for code blocks, tables, horizontal rules, details, and definition lists
+- **Menu "Format Bar" radio button state sync**: Fixed "View → Format Bar" submenu radio buttons (top/right/none) not matching actual display. Persists format bar mode to `mdpad-config.json`
+
+### 🆕 New Module
+- **view-state.js**: Main process view state management module for format bar mode persistence and menu radio button synchronization
+
+---
+
+## v1.1.00068 (2026-03-04)
 
 ### 🐛 Bug Fixes
 - **Preview mode fix**: Fixed issue where preview mode did not activate when opening files from Explorer (double-click or "Open with"). Root cause: `onApplyPaneConfig` IPC listener was registered after multiple `await` calls in `init()`, causing the `apply-pane-config` message from `did-finish-load` to be lost. Moved all IPC listeners to the top of `init()` (before the first `await`)

@@ -7,8 +7,8 @@
  * @file format-commands.js
  * @module format-commands
  * @version 0.1.10020
- * @revision 2
- * @lastModified 2026-03-04 22:00:00 (JST)
+ * @revision 3
+ * @lastModified 2026-03-07 20:00:00 (JST)
  * @todo
  * - テーブル挿入時のセル選択サポート（$SELECT$ マーカー）
  */
@@ -809,7 +809,14 @@ export const FORMAT_COMMANDS = [
 ];
 
 /**
- * Insert color-wrapped text: <span style="color:HEX">selection</span>
+ * カラーで囲むテキストを挿入する。
+ * 選択テキストがあればそれを囲み、なければ "text" を挿入する。
+ * 挿入後、色履歴に自動保存する。
+ *
+ * @function insertColor
+ * @param {import("@codemirror/view").EditorView} view - エディタビュー
+ * @param {string} color - 16進カラーコード（例: "#cf222e"）
+ * @returns {boolean} - 常に true
  */
 export function insertColor(view, color) {
   const { state } = view;
@@ -823,7 +830,58 @@ export function insertColor(view, color) {
     changes: { from, to, insert },
     selection: { anchor: from + open.length, head: from + open.length + selText.length },
   });
+  // 色履歴に自動保存（format-toolbar / format-context-menu 両方で共通に機能する）
+  addColorToHistory(color);
   return true;
+}
+
+// ─── Color History ──────────────────────────────────────────────────
+
+/** localStorage に保存する色履歴のキー */
+const COLOR_HISTORY_KEY = "mdpad:colorHistory";
+/** 最大保存数（6列 x 2行 = 12色） */
+const MAX_COLOR_HISTORY = 12;
+
+/**
+ * 色を履歴に追加する。
+ * 重複があれば先頭に移動し、最大数を超えた分は末尾を切り捨てる。
+ *
+ * @function addColorToHistory
+ * @param {string} color - 16進カラーコード
+ * @returns {void}
+ */
+export function addColorToHistory(color) {
+  let history = [];
+  try {
+    history = JSON.parse(localStorage.getItem(COLOR_HISTORY_KEY)) || [];
+  } catch {
+    /* localStorage が使えない場合やパースエラー時は空配列のまま続行 */
+  }
+  // 重複を除去して先頭に追加
+  history = [color, ...history.filter((c) => c !== color)];
+  // 最大数を超えたら末尾を切り捨て
+  if (history.length > MAX_COLOR_HISTORY) {
+    history = history.slice(0, MAX_COLOR_HISTORY);
+  }
+  try {
+    localStorage.setItem(COLOR_HISTORY_KEY, JSON.stringify(history));
+  } catch {
+    /* localStorage 書き込み失敗時は無視（容量超過など） */
+  }
+}
+
+/**
+ * 色履歴を取得する。
+ *
+ * @function getColorHistory
+ * @returns {string[]} - 16進カラーコードの配列（最新順、最大12要素）
+ */
+export function getColorHistory() {
+  try {
+    return JSON.parse(localStorage.getItem(COLOR_HISTORY_KEY)) || [];
+  } catch {
+    return [];
+  }
 }
 
 /** Lookup command by ID */

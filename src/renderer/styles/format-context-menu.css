@@ -1,3 +1,18 @@
+/*
+右クリックコンテキストメニューのスタイル。
+基本編集操作（レベル1）、装飾サブメニュー（レベル2）、
+見出し・カラーのフライアウト（レベル3）をカバーする。
+
+責務: コンテキストメニューのレイアウト・外観・アニメーション
+適用範囲: .format-context-menu 以下の全要素
+依存: なし（自己完結型CSS）
+副作用: z-index 99999/100000 でオーバーレイ表示
+
+Version: 0.1.10020
+Revision: 1
+LastModified: 2026-03-07 20:00:00 (JST)
+*/
+
 /* ===== Format Context Menu ===== */
 
 .format-context-menu {
@@ -9,7 +24,7 @@
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15), 0 2px 6px rgba(0, 0, 0, 0.08);
   padding: 4px 0;
   min-width: 220px;
-  max-height: calc(100vh - 16px); /* ビューポート高さから上下マージンを引く */
+  max-height: calc(100vh - 24px - 16px); /* ステータスバー(24px) + 上下マージン(16px)を引く */
   overflow-y: auto;               /* 高さ超過時にスクロール可能にする */
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   font-size: 13px;
@@ -155,4 +170,21 @@
 .fcm-color-palette {
   padding: 8px;
   width: 200px;
+}
+
+/* ===== Disabled state ===== */
+
+.format-context-menu .fcm-item.disabled {
+  opacity: 0.4;
+  cursor: default;
+  pointer-events: none;
+}
+
+/* ===== Color history label ===== */
+
+.fcm-color-history-label {
+  font-size: 10px;
+  color: #8b949e;
+  margin: 6px 0 2px 0;
+  padding: 0;
 }

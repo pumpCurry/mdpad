@@ -275,7 +275,9 @@
     "definitionList": "定義リスト",
     "kbd": "キーボード入力",
     "escape": "エスケープ",
-    "color": "カラー"
+    "color": "カラー",
+    "formatting": "装飾",
+    "recentColors": "最近の色"
   },
   "update": {
     "checking": "アップデートを確認中...",

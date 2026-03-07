@@ -275,7 +275,9 @@
     "definitionList": "Definition List",
     "kbd": "Keyboard Input",
     "escape": "Escape",
-    "color": "Color"
+    "color": "Color",
+    "formatting": "Formatting",
+    "recentColors": "Recent Colors"
   },
   "update": {
     "checking": "Checking for updates...",

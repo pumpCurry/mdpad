@@ -21,15 +21,10 @@ extraMetadata:
   description: mdpad
   author: "5r4ce2"
 
-fileAssociations:
-  - ext: md
-    name: "Markdown File"
-    description: "Markdownファイル"
-    role: Editor
-  - ext: markdown
-    name: "Markdown File"
-    description: "Markdownファイル"
-    role: Editor
+# fileAssociations は installer.nsh のカスタムページで管理する。
+# electron-builder の fileAssociations と installer.nsh の _WriteShellEntry が
+# 異なるレジストリパスに書き込むため、二重登録（ページ重複表示）の原因になっていた。
+# installer.nsh のカスタムページに一本化することで、ユーザー選択に基づく登録のみ行う。
 
 win:
   target:

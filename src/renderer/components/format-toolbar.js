@@ -1,11 +1,17 @@
 /**
- * format-toolbar.js
+ * @fileoverview 書式ツールバー。3つの表示モード（topbar/sidebar/hidden）を持ち、
+ * クリック可能な書式ボタンとアクティブ状態のトラッキングを提供する。
+ * カラーパレットには色履歴セクションを含む。
  *
- * Format toolbar with 3 display modes: topbar, sidebar, hidden.
- * Provides clickable format buttons with active state tracking.
+ * @description format-toolbar.js — Format toolbar
+ * @file format-toolbar.js
+ * @module format-toolbar
+ * @version 0.1.10020
+ * @revision 1
+ * @lastModified 2026-03-07 20:00:00 (JST)
  */
 
-import { FORMAT_COMMANDS, isFormatActive, getFormatCommand, insertColor } from "./format-commands.js";
+import { FORMAT_COMMANDS, isFormatActive, getFormatCommand, insertColor, getColorHistory } from "./format-commands.js";
 import { getEditor } from "./editor-pane.js";
 import { t, onLocaleChange } from "../../i18n/i18n-renderer.js";
 
@@ -495,6 +501,39 @@ function showColorPalette(anchorBtn) {
   });
 
   colorPaletteEl.appendChild(grid);
+
+  // 色履歴セクション（使用履歴があれば表示）
+  const history = getColorHistory();
+  if (history.length > 0) {
+    const histLabel = document.createElement("div");
+    histLabel.style.cssText = "font-size:10px;color:#8b949e;margin:6px 0 2px 0;padding:0;";
+    histLabel.textContent = t("format.recentColors");
+    colorPaletteEl.appendChild(histLabel);
+
+    const histGrid = document.createElement("div");
+    histGrid.style.cssText = "display:grid;grid-template-columns:repeat(6,1fr);gap:4px;";
+
+    history.forEach((color) => {
+      const swatch = document.createElement("button");
+      swatch.style.cssText =
+        `width:26px;height:26px;border-radius:4px;border:1px solid #d0d7de;cursor:pointer;background:${color};padding:0;`;
+      if (color === "#ffffff") swatch.style.border = "1px solid #8b949e";
+      swatch.title = color;
+      swatch.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        closeColorPalette();
+        const view = getEditor();
+        if (view) {
+          insertColor(view, color);
+          view.focus();
+        }
+      });
+      histGrid.appendChild(swatch);
+    });
+
+    colorPaletteEl.appendChild(histGrid);
+  }
 
   // Custom color input row
   const customRow = document.createElement("div");
